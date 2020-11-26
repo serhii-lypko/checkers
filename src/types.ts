@@ -11,9 +11,14 @@ export type CellConfig = {
 
 export type BoardConfig = CellConfig[];
 
+export type PlayerChecker = {
+  id: string;
+  kind: "default" | "king";
+};
+
 export type PlayersState = {
-  white: string[];
-  black: string[];
+  white: PlayerChecker[];
+  black: PlayerChecker[];
 };
 
 export type CellUIProps = {

@@ -10,6 +10,7 @@ import {
   boardConfig,
   initialPlayersStateConfig,
   createDiagonals,
+  getPlayersCheckersIds,
   findElementBetween,
 } from "./utils";
 
@@ -35,6 +36,7 @@ import {
 
 // TODO: implement with reactive actions
 
+// TODO.0: implement util methods without hard coding
 // TODO.1: memoization of components (Cell)
 // TODO.2 (epic): implement sequence of moves between opponents (including capturing chaining)
 // TODO.3: back & forward actions
@@ -43,13 +45,11 @@ import {
 
 const diagonals = createDiagonals();
 
-// console.log("diagonals: ", diagonals);
+// TODO: rewrite players state with struct like
 
 function App() {
   const [playersState, setPlayersState] = useState<PlayersState>(initialPlayersStateConfig);
   const [activePromotion, setActivePromotion] = useState<ActivePromotion | undefined>(undefined);
-
-  // console.log("playersState: ", playersState);
 
   // console.log("playersState: ", playersState);
 
@@ -84,7 +84,7 @@ function App() {
       const opponentCheckers = playersState[opponent];
 
       const opponentCheckersOnPromotionDiagonal = opponentCheckers.filter((checker) => {
-        return chosenPromotionDiagonal?.includes(checker);
+        return chosenPromotionDiagonal?.includes(checker.id);
       });
 
       if (moveRangeAttempt === 2) {
@@ -94,7 +94,9 @@ function App() {
           destinationCell,
         );
 
-        const isCapturing = opponentCheckersOnPromotionDiagonal.includes(capturingChecker);
+        const isCapturing = opponentCheckersOnPromotionDiagonal
+          .map((checker) => checker.id)
+          .includes(capturingChecker);
 
         if (isCapturing) return { promotionType: "capturing", capturingChecker, opponent };
       }
@@ -112,15 +114,18 @@ function App() {
       if (!capturingChecker || !opponent || !activePromotion?.player) return;
 
       const updatedPlayerState = playersState[activePromotion?.player].map((checker) => {
-        if (checker === activePromotion?.cellId) {
-          return destinationCell;
+        if (checker.id === activePromotion?.cellId) {
+          return {
+            ...checker,
+            id: destinationCell,
+          };
         }
 
         return checker;
       });
 
       const updatedOpponentState = playersState[opponent].filter((checker) => {
-        return checker !== capturingChecker;
+        return checker.id !== capturingChecker;
       });
 
       const updatedPlayersState = {
@@ -140,8 +145,11 @@ function App() {
       const playerState = playersState[activePlayerKey];
 
       const updatedPlayerState = playerState.map((checker) => {
-        if (checker === activePromotion?.cellId) {
-          return destinationCell;
+        if (checker.id === activePromotion?.cellId) {
+          return {
+            ...checker,
+            id: destinationCell,
+          };
         }
 
         return checker;
@@ -160,7 +168,7 @@ function App() {
 
   const handleCellClick = useCallback(
     ({ id: cellIdFromClick }: CellConfig) => {
-      const { white: whitePlayerCheckers, black: blackPlayerCheckers } = playersState;
+      const { whitePlayerCheckers, blackPlayerCheckers } = getPlayersCheckersIds(playersState);
 
       if (cellIdFromClick === activePromotion?.cellId) {
         setActivePromotion(undefined);
@@ -178,6 +186,10 @@ function App() {
           activePromotion.cellId,
           cellIdFromClick,
         );
+
+        console.log("cellIdFromClick: ", cellIdFromClick);
+
+        console.log("promotionType: ", promotionType);
 
         switch (promotionType) {
           case "basicMove":
@@ -252,6 +264,8 @@ function App() {
   const renderCells = () => {
     if (!playersState) return null;
 
+    const { whitePlayerCheckers, blackPlayerCheckers } = getPlayersCheckersIds(playersState);
+
     return boardConfig.map((cell) => {
       const { id, color, coordinates } = cell;
 
@@ -263,8 +277,6 @@ function App() {
         left: xFactor,
         color,
       };
-
-      const { white: whitePlayerCheckers, black: blackPlayerCheckers } = playersState;
 
       const cellHasWhiteChecker = whitePlayerCheckers.includes(id);
       const cellHasBlackChecker = blackPlayerCheckers.includes(id);

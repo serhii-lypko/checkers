@@ -1,5 +1,5 @@
 import { boardSettings } from "./config";
-import { Player, CellConfig, BoardConfig } from "./types";
+import { Player, PlayersState, PlayerChecker, CellConfig, BoardConfig } from "./types";
 
 /* - - - - - - - - Board config - - - - - - - - - - */
 
@@ -38,7 +38,9 @@ type CreateInitialPlayersStateConfig = {
   diagonalsCreator: () => Array<string[]>;
 };
 
-export function createInitialPlayersStateConfig(args: CreateInitialPlayersStateConfig) {
+export function createInitialPlayersStateConfig(
+  args: CreateInitialPlayersStateConfig,
+): PlayersState {
   const { boardConfig, diagonalsCreator } = args;
   const { cellsNumber } = boardSettings;
 
@@ -46,14 +48,37 @@ export function createInitialPlayersStateConfig(args: CreateInitialPlayersStateC
 
   // TODO: create initial checkers collection programmatically
 
-  const white = ["a1", "b2", "a3", "c1", "d2", "c3", "e1", "f2", "e3", "g1", "h2", "g3"];
-  const black = ["a7", "b8", "b6", "c7", "d8", "d6", "e7", "f8", "f6", "g7", "h8", "h6"];
+  const white: PlayerChecker[] = [
+    { id: "a1", kind: "default" },
+    { id: "b2", kind: "default" },
+    { id: "a3", kind: "default" },
+    { id: "c1", kind: "default" },
+    { id: "d2", kind: "default" },
+    { id: "c3", kind: "default" },
+    { id: "e1", kind: "default" },
+    { id: "f2", kind: "default" },
+    { id: "e3", kind: "default" },
+    { id: "g1", kind: "default" },
+    { id: "h2", kind: "default" },
+    { id: "g3", kind: "default" },
+  ];
 
-  return {
-    white,
-    black,
-    // allPlayersCheckers: [...whitePlayerCheckers, ...blackPlayerCheckers],
-  };
+  const black: PlayerChecker[] = [
+    { id: "a7", kind: "default" },
+    { id: "b8", kind: "default" },
+    { id: "b6", kind: "default" },
+    { id: "c7", kind: "default" },
+    { id: "d8", kind: "default" },
+    { id: "d6", kind: "default" },
+    { id: "e7", kind: "default" },
+    { id: "f8", kind: "default" },
+    { id: "f6", kind: "default" },
+    { id: "g7", kind: "default" },
+    { id: "h8", kind: "default" },
+    { id: "h6", kind: "default" },
+  ];
+
+  return { white, black };
 }
 
 export const initialPlayersStateConfig = createInitialPlayersStateConfig({
@@ -84,6 +109,18 @@ export function createDiagonals() {
     ["h4", "g5", "f6", "e7", "d8"],
     ["h6", "g7", "f8"],
   ];
+}
+
+export function getPlayersCheckersIds(players: PlayersState) {
+  const { white, black } = players;
+
+  const whitePlayerCheckers = white.map((checkerConfig) => checkerConfig.id);
+  const blackPlayerCheckers = black.map((checkerConfig) => checkerConfig.id);
+
+  return {
+    whitePlayerCheckers,
+    blackPlayerCheckers,
+  };
 }
 
 export function findElementBetween<T>(list: Array<T>, first: T, last: T) {
