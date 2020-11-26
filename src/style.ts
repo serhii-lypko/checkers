@@ -47,11 +47,13 @@ export const Cell = styled(FlexCenter)<{ ui: CellUIProps }>`
   border: 1px solid black;
 `;
 
-export const Checker = styled.div<{ isLightColor: boolean }>`
-  width: ${cellWidth - 15}px;
-  height: ${cellWidth - 15}px;
+export const Checker = styled.div<{ isLightColor: boolean; isInPromotion: boolean }>`
+  width: ${cellWidth - 20}px;
+  height: ${cellWidth - 20}px;
   background: ${(p) => (p.isLightColor ? "white" : "#333")};
   border-radius: 50%;
+  border: 3px solid
+    ${(p) => (p.isInPromotion ? (p.isLightColor ? "black" : "white") : "transparent")};
 `;
 
 /* - - - - - - - - - - - - - - - - - - - */

@@ -1,10 +1,17 @@
 import React, { useState, useCallback } from "react";
-import { range, reverse } from "lodash";
 
-import { CellConfig, PlayersConfig } from "./types";
+import { fromEvent } from "rxjs";
+import { range, reverse, flatten } from "lodash";
 
-import { boardSettings } from "./config";
-import { boardConfig, initialPlayersStateConfig } from "./utils";
+import { CellConfig, PlayersState, ActivePromotion, PromotionType } from "./types";
+
+import { boardSettings, players } from "./config";
+import {
+  boardConfig,
+  initialPlayersStateConfig,
+  createDiagonals,
+  findElementBetween,
+} from "./utils";
 
 import {
   AppHolder,
@@ -26,33 +33,180 @@ import {
 /* - - - - - - - - - - - - - - - - - - - */
 /* - - - - - - - - - - - - - - - - - - - */
 
-// TODO: XState?
+// TODO: implement with reactive actions
 
-// TODO.1: memoization of components (cells, checkers and so on)
-// TODO.2: useCallback for handlers
-// TODO.3: animated appearing of cells & checkers
-// TODO.4: back & forward actions
+// TODO.1: memoization of components (Cell)
+// TODO.2 (epic): implement sequence of moves between opponents (including capturing chaining)
+// TODO.3: back & forward actions
 
 /* - - - - - - - - - - - - - - - - - - - */
 
+const diagonals = createDiagonals();
+
+// console.log("diagonals: ", diagonals);
+
 function App() {
-  const [playersState, updatePlayersState] = useState<PlayersConfig>(initialPlayersStateConfig);
+  const [playersState, setPlayersState] = useState<PlayersState>(initialPlayersStateConfig);
+  const [activePromotion, setActivePromotion] = useState<ActivePromotion | undefined>(undefined);
+
+  // console.log("playersState: ", playersState);
+
+  // console.log("playersState: ", playersState);
+
+  // console.log("activePromotion: ", activePromotion);
 
   /* - - - - - - - - - - - - - - - - - - - */
 
-  const handleCellClick = useCallback((cell: CellConfig) => {
-    // const updatedState = boardState.map((stateCell) => {
-    //   if (cell.shortand === stateCell.shortand) {
-    //     return {
-    //       ...stateCell,
-    //       state: boardConfig.colors.black,
-    //     };
-    //   }
-    //
-    //   return stateCell;
-    // });
-    //
-    // updateBoardState(updatedState as CellConfig[]);
+  const definePromotionType = useCallback(
+    (initialCell: string, destinationCell: string): PromotionType => {
+      const allowedDiagonals = diagonals.filter((diagonal) => diagonal.includes(initialCell));
+      const allowedCoordinates = flatten(allowedDiagonals);
+      const diagonalPromotionIsCorrect = allowedCoordinates.includes(destinationCell);
+
+      if (!diagonalPromotionIsCorrect) return { promotionType: "incorrect" };
+
+      /* - - - - - - - - - - - - - - - - - - - */
+
+      const chosenPromotionDiagonal = allowedDiagonals.find((diagonal) =>
+        diagonal.includes(destinationCell),
+      );
+
+      const initialPositionIndex = chosenPromotionDiagonal?.indexOf(initialCell) as number;
+      const destinationPositionIndex = chosenPromotionDiagonal?.indexOf(destinationCell) as number;
+
+      const moveRangeAttempt = Math.abs(initialPositionIndex - destinationPositionIndex);
+
+      if (moveRangeAttempt === 1) return { promotionType: "basicMove" };
+
+      /* - - - - - - - - - - - - - - - - - - - */
+
+      const opponent = players.filter((player) => player !== activePromotion?.player)[0];
+      const opponentCheckers = playersState[opponent];
+
+      const opponentCheckersOnPromotionDiagonal = opponentCheckers.filter((checker) => {
+        return chosenPromotionDiagonal?.includes(checker);
+      });
+
+      if (moveRangeAttempt === 2) {
+        const capturingChecker = findElementBetween<string>(
+          chosenPromotionDiagonal as string[],
+          initialCell,
+          destinationCell,
+        );
+
+        const isCapturing = opponentCheckersOnPromotionDiagonal.includes(capturingChecker);
+
+        if (isCapturing) return { promotionType: "capturing", capturingChecker, opponent };
+      }
+
+      // in case if moveRangeAttempt is incorrect
+      return { promotionType: "incorrect" };
+    },
+    [activePromotion, playersState],
+  );
+
+  /* - - - - - - - - - - - - - - - - - - - */
+
+  const makeCapturing = useCallback(
+    (destinationCell: string, capturingChecker?: string, opponent?: string) => {
+      if (!capturingChecker || !opponent || !activePromotion?.player) return;
+
+      const updatedPlayerState = playersState[activePromotion?.player].map((checker) => {
+        if (checker === activePromotion?.cellId) {
+          return destinationCell;
+        }
+
+        return checker;
+      });
+
+      const updatedOpponentState = playersState[opponent].filter((checker) => {
+        return checker !== capturingChecker;
+      });
+
+      const updatedPlayersState = {
+        [activePromotion.player]: updatedPlayerState,
+        [opponent]: updatedOpponentState,
+      };
+
+      setPlayersState(updatedPlayersState as PlayersState);
+      setActivePromotion(undefined);
+    },
+    [playersState, activePromotion],
+  );
+
+  const makeBasicMove = useCallback(
+    (destinationCell: string) => {
+      const activePlayerKey = activePromotion?.player as string;
+      const playerState = playersState[activePlayerKey];
+
+      const updatedPlayerState = playerState.map((checker) => {
+        if (checker === activePromotion?.cellId) {
+          return destinationCell;
+        }
+
+        return checker;
+      });
+
+      setPlayersState({
+        ...playersState,
+        [activePlayerKey]: updatedPlayerState,
+      });
+      setActivePromotion(undefined);
+    },
+    [activePromotion, playersState],
+  );
+
+  /* - - - - - - - - - - - - - - - - - - - */
+
+  const handleCellClick = useCallback(
+    ({ id: cellIdFromClick }: CellConfig) => {
+      const { white: whitePlayerCheckers, black: blackPlayerCheckers } = playersState;
+
+      if (cellIdFromClick === activePromotion?.cellId) {
+        setActivePromotion(undefined);
+        return;
+      }
+
+      const cellIsTaken =
+        whitePlayerCheckers.includes(cellIdFromClick) ||
+        blackPlayerCheckers.includes(cellIdFromClick);
+
+      if (activePromotion) {
+        if (cellIsTaken) return;
+
+        const { promotionType, capturingChecker, opponent } = definePromotionType(
+          activePromotion.cellId,
+          cellIdFromClick,
+        );
+
+        switch (promotionType) {
+          case "basicMove":
+            makeBasicMove(cellIdFromClick);
+            return;
+          case "capturing":
+            makeCapturing(cellIdFromClick, capturingChecker, opponent);
+            return;
+          case "incorrect":
+            return;
+        }
+      }
+
+      if (cellIsTaken) {
+        const belongsToWhitePlayer = whitePlayerCheckers.includes(cellIdFromClick);
+
+        setActivePromotion({
+          player: belongsToWhitePlayer ? "white" : "black",
+          cellId: cellIdFromClick,
+        });
+        return;
+      }
+    },
+    [activePromotion, playersState, definePromotionType, makeBasicMove, makeCapturing],
+  );
+
+  const handleResetAction = useCallback(() => {
+    setPlayersState(initialPlayersStateConfig);
+    setActivePromotion(undefined);
   }, []);
 
   /* - - - - - - - - - Rulers - - - - - - - - - - */
@@ -80,7 +234,11 @@ function App() {
       <XRulerContainer className="x-ruler-container">
         {alphabet.map((char) => {
           return (
-            <XRulerCell key={char} left={alphabet.indexOf(char) * cellWidth} className="x-ruler-cell">
+            <XRulerCell
+              key={char}
+              left={alphabet.indexOf(char) * cellWidth}
+              className="x-ruler-cell"
+            >
               {char}
             </XRulerCell>
           );
@@ -95,7 +253,7 @@ function App() {
     if (!playersState) return null;
 
     return boardConfig.map((cell) => {
-      const { shortand, color, coordinates } = cell;
+      const { id, color, coordinates } = cell;
 
       const yFactor = (boardSettings.cellsNumber - coordinates.y) * boardSettings.cellWidth;
       const xFactor = boardSettings.alphabet.indexOf(coordinates.x) * boardSettings.cellWidth;
@@ -106,14 +264,19 @@ function App() {
         color,
       };
 
-      const { whitePlayerCheckers, blackPlayerCheckers } = playersState;
+      const { white: whitePlayerCheckers, black: blackPlayerCheckers } = playersState;
 
-      const cellHasWhiteChecker = whitePlayerCheckers.includes(shortand);
-      const cellHasBlackChecker = blackPlayerCheckers.includes(shortand);
+      const cellHasWhiteChecker = whitePlayerCheckers.includes(id);
+      const cellHasBlackChecker = blackPlayerCheckers.includes(id);
 
       return (
-        <Cell key={shortand} onClick={() => handleCellClick(cell)} ui={cellUI} className="cell">
-          {(cellHasWhiteChecker || cellHasBlackChecker) && <Checker isLightColor={cellHasWhiteChecker} />}
+        <Cell key={id} ui={cellUI} onClick={() => handleCellClick(cell)} className="cell">
+          {(cellHasWhiteChecker || cellHasBlackChecker) && (
+            <Checker
+              isLightColor={cellHasWhiteChecker}
+              isInPromotion={activePromotion && activePromotion.cellId === id}
+            />
+          )}
         </Cell>
       );
     });
@@ -132,7 +295,7 @@ function App() {
       </BoardHolder>
 
       <ControlsHolder className="controls-holder">
-        <button onClick={() => updatePlayersState(initialPlayersStateConfig)}>Reset</button>
+        <button onClick={handleResetAction}>Reset</button>
         <button>Back</button>
         <button>Forward</button>
       </ControlsHolder>

@@ -1,3 +1,5 @@
+export const players = ["white", "black"];
+
 export const boardSettings = {
   cellWidth: 70,
   cellsNumber: 8,
