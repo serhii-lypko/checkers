@@ -4,7 +4,7 @@ import { boardSettings } from "./config";
 
 import { CellUIProps } from "./types";
 
-const { cellWidth, cellsNumber } = boardSettings;
+const { cellWidth, cellsNumber, colors } = boardSettings;
 
 /* - - - - - - - - - - Common - - - - - - - - - - - - */
 
@@ -102,4 +102,18 @@ export const ControlsHolder = styled.div`
     width: 70px;
     margin-right: 10px;
   }
+`;
+
+export const LastMoveByHolder = styled.div`
+  display: flex;
+  align-items: center;
+  margin-top: 75px;
+`;
+
+export const MockCell = styled(FlexCenter)`
+  width: ${cellWidth}px;
+  height: ${cellWidth}px;
+  margin-right: 15px;
+  background: ${colors.black};
+  border: 1px solid black;
 `;

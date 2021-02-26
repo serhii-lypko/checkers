@@ -1,9 +1,8 @@
-import React, { useState, useCallback } from "react";
+import React, { useState } from "react";
 
-import { fromEvent } from "rxjs";
 import { range, reverse, flatten } from "lodash";
 
-import { CellConfig, PlayersState, ActivePromotion, PromotionType } from "./types";
+import { CellConfig, PlayersState, ActivePromotion, PromotionType, Player } from "./types";
 
 import { boardSettings, players } from "./config";
 import {
@@ -24,6 +23,8 @@ import {
   YRulerCell,
   XRulerCell,
   ControlsHolder,
+  LastMoveByHolder,
+  MockCell,
 } from "./style";
 
 /* - - - - - - - - - - - - - - - - - - - */
@@ -45,181 +46,165 @@ import {
 
 const diagonals = createDiagonals();
 
-// TODO: rewrite players state with struct like
-
 function App() {
   const [playersState, setPlayersState] = useState<PlayersState>(initialPlayersStateConfig);
   const [activePromotion, setActivePromotion] = useState<ActivePromotion | undefined>(undefined);
-
-  // console.log("playersState: ", playersState);
-
-  // console.log("activePromotion: ", activePromotion);
+  const [lastMoveBy, setLastMoveBy] = useState<undefined | Player>(undefined);
 
   /* - - - - - - - - - - - - - - - - - - - */
 
-  const definePromotionType = useCallback(
-    (initialCell: string, destinationCell: string): PromotionType => {
-      const allowedDiagonals = diagonals.filter((diagonal) => diagonal.includes(initialCell));
-      const allowedCoordinates = flatten(allowedDiagonals);
-      const diagonalPromotionIsCorrect = allowedCoordinates.includes(destinationCell);
+  const definePromotionType = (initialCell: string, destinationCell: string): PromotionType => {
+    const allowedDiagonals = diagonals.filter((diagonal) => diagonal.includes(initialCell));
+    const allowedCoordinates = flatten(allowedDiagonals);
+    const diagonalPromotionIsCorrect = allowedCoordinates.includes(destinationCell);
 
-      if (!diagonalPromotionIsCorrect) return { promotionType: "incorrect" };
+    if (!diagonalPromotionIsCorrect) return { promotionType: "incorrect" };
 
-      /* - - - - - - - - - - - - - - - - - - - */
+    /* - - - - - - - - - - - - - - - - - - - */
 
-      const chosenPromotionDiagonal = allowedDiagonals.find((diagonal) =>
-        diagonal.includes(destinationCell),
+    const chosenPromotionDiagonal = allowedDiagonals.find((diagonal) =>
+      diagonal.includes(destinationCell),
+    );
+
+    const initialPositionIndex = chosenPromotionDiagonal?.indexOf(initialCell) as number;
+    const destinationPositionIndex = chosenPromotionDiagonal?.indexOf(destinationCell) as number;
+
+    const moveRangeAttempt = Math.abs(initialPositionIndex - destinationPositionIndex);
+
+    if (moveRangeAttempt === 1) return { promotionType: "basicMove" };
+
+    /* - - - - - - - - - - - - - - - - - - - */
+
+    const opponent = players.filter((player) => player !== activePromotion?.player)[0];
+    const opponentCheckers = playersState[opponent];
+
+    const opponentCheckersOnPromotionDiagonal = opponentCheckers.filter((checker) => {
+      return chosenPromotionDiagonal?.includes(checker.id);
+    });
+
+    if (moveRangeAttempt === 2) {
+      const capturingChecker = findElementBetween<string>(
+        chosenPromotionDiagonal as string[],
+        initialCell,
+        destinationCell,
       );
 
-      const initialPositionIndex = chosenPromotionDiagonal?.indexOf(initialCell) as number;
-      const destinationPositionIndex = chosenPromotionDiagonal?.indexOf(destinationCell) as number;
+      const isCapturing = opponentCheckersOnPromotionDiagonal
+        .map((checker) => checker.id)
+        .includes(capturingChecker);
 
-      const moveRangeAttempt = Math.abs(initialPositionIndex - destinationPositionIndex);
+      if (isCapturing) return { promotionType: "capturing", capturingChecker, opponent };
+    }
 
-      if (moveRangeAttempt === 1) return { promotionType: "basicMove" };
-
-      /* - - - - - - - - - - - - - - - - - - - */
-
-      const opponent = players.filter((player) => player !== activePromotion?.player)[0];
-      const opponentCheckers = playersState[opponent];
-
-      const opponentCheckersOnPromotionDiagonal = opponentCheckers.filter((checker) => {
-        return chosenPromotionDiagonal?.includes(checker.id);
-      });
-
-      if (moveRangeAttempt === 2) {
-        const capturingChecker = findElementBetween<string>(
-          chosenPromotionDiagonal as string[],
-          initialCell,
-          destinationCell,
-        );
-
-        const isCapturing = opponentCheckersOnPromotionDiagonal
-          .map((checker) => checker.id)
-          .includes(capturingChecker);
-
-        if (isCapturing) return { promotionType: "capturing", capturingChecker, opponent };
-      }
-
-      // in case if moveRangeAttempt is incorrect
-      return { promotionType: "incorrect" };
-    },
-    [activePromotion, playersState],
-  );
+    // in case if moveRangeAttempt is incorrect
+    return { promotionType: "incorrect" };
+  };
 
   /* - - - - - - - - - - - - - - - - - - - */
 
-  const makeCapturing = useCallback(
-    (destinationCell: string, capturingChecker?: string, opponent?: string) => {
-      if (!capturingChecker || !opponent || !activePromotion?.player) return;
+  const makeCapturing = (destinationCell: string, capturingChecker?: string, opponent?: string) => {
+    if (!capturingChecker || !opponent || !activePromotion?.player) return;
 
-      const updatedPlayerState = playersState[activePromotion?.player].map((checker) => {
-        if (checker.id === activePromotion?.cellId) {
-          return {
-            ...checker,
-            id: destinationCell,
-          };
-        }
+    const updatedPlayerState = playersState[activePromotion?.player].map((checker) => {
+      if (checker.id === activePromotion?.cellId) {
+        return {
+          ...checker,
+          id: destinationCell,
+        };
+      }
 
-        return checker;
-      });
+      return checker;
+    });
 
-      const updatedOpponentState = playersState[opponent].filter((checker) => {
-        return checker.id !== capturingChecker;
-      });
+    const updatedOpponentState = playersState[opponent].filter((checker) => {
+      return checker.id !== capturingChecker;
+    });
 
-      const updatedPlayersState = {
-        [activePromotion.player]: updatedPlayerState,
-        [opponent]: updatedOpponentState,
-      };
+    const updatedPlayersState = {
+      [activePromotion.player]: updatedPlayerState,
+      [opponent]: updatedOpponentState,
+    };
 
-      setPlayersState(updatedPlayersState as PlayersState);
-      setActivePromotion(undefined);
-    },
-    [playersState, activePromotion],
-  );
+    setPlayersState(updatedPlayersState as PlayersState);
+    setActivePromotion(undefined);
+  };
 
-  const makeBasicMove = useCallback(
-    (destinationCell: string) => {
-      const activePlayerKey = activePromotion?.player as string;
-      const playerState = playersState[activePlayerKey];
+  const makeBasicMove = (destinationCell: string) => {
+    const activePlayerKey = activePromotion?.player as string;
+    const playerState = playersState[activePlayerKey];
 
-      const updatedPlayerState = playerState.map((checker) => {
-        if (checker.id === activePromotion?.cellId) {
-          return {
-            ...checker,
-            id: destinationCell,
-          };
-        }
+    const updatedPlayerState = playerState.map((checker) => {
+      if (checker.id === activePromotion?.cellId) {
+        return {
+          ...checker,
+          id: destinationCell,
+        };
+      }
 
-        return checker;
-      });
+      return checker;
+    });
 
-      setPlayersState({
-        ...playersState,
-        [activePlayerKey]: updatedPlayerState,
-      });
-      setActivePromotion(undefined);
-    },
-    [activePromotion, playersState],
-  );
+    setPlayersState({
+      ...playersState,
+      [activePlayerKey]: updatedPlayerState,
+    });
+    setActivePromotion(undefined);
+  };
 
   /* - - - - - - - - - - - - - - - - - - - */
 
-  const handleCellClick = useCallback(
-    ({ id: cellIdFromClick }: CellConfig) => {
-      const { whitePlayerCheckers, blackPlayerCheckers } = getPlayersCheckersIds(playersState);
+  const handleCellClick = ({ id: cellIdFromClick }: CellConfig) => {
+    const { whitePlayerCheckers, blackPlayerCheckers } = getPlayersCheckersIds(playersState);
 
-      if (cellIdFromClick === activePromotion?.cellId) {
-        setActivePromotion(undefined);
-        return;
+    if (cellIdFromClick === activePromotion?.cellId) {
+      setActivePromotion(undefined);
+      return;
+    }
+
+    const cellIsTaken =
+      whitePlayerCheckers.includes(cellIdFromClick) ||
+      blackPlayerCheckers.includes(cellIdFromClick);
+
+    if (activePromotion) {
+      if (cellIsTaken) return;
+
+      const { promotionType, capturingChecker, opponent } = definePromotionType(
+        activePromotion.cellId,
+        cellIdFromClick,
+      );
+
+      if (promotionType !== "incorrect") {
+        setLastMoveBy(activePromotion.player);
       }
 
-      const cellIsTaken =
-        whitePlayerCheckers.includes(cellIdFromClick) ||
-        blackPlayerCheckers.includes(cellIdFromClick);
+      switch (promotionType) {
+        case "basicMove":
+          makeBasicMove(cellIdFromClick);
+          return;
+        case "capturing":
+          makeCapturing(cellIdFromClick, capturingChecker, opponent);
 
-      if (activePromotion) {
-        if (cellIsTaken) return;
-
-        const { promotionType, capturingChecker, opponent } = definePromotionType(
-          activePromotion.cellId,
-          cellIdFromClick,
-        );
-
-        console.log("cellIdFromClick: ", cellIdFromClick);
-
-        console.log("promotionType: ", promotionType);
-
-        switch (promotionType) {
-          case "basicMove":
-            makeBasicMove(cellIdFromClick);
-            return;
-          case "capturing":
-            makeCapturing(cellIdFromClick, capturingChecker, opponent);
-            return;
-          case "incorrect":
-            return;
-        }
+          return;
+        case "incorrect":
+          return;
       }
+    }
 
-      if (cellIsTaken) {
-        const belongsToWhitePlayer = whitePlayerCheckers.includes(cellIdFromClick);
+    if (cellIsTaken) {
+      const belongsToWhitePlayer = whitePlayerCheckers.includes(cellIdFromClick);
 
-        setActivePromotion({
-          player: belongsToWhitePlayer ? "white" : "black",
-          cellId: cellIdFromClick,
-        });
-        return;
-      }
-    },
-    [activePromotion, playersState, definePromotionType, makeBasicMove, makeCapturing],
-  );
+      setActivePromotion({
+        player: belongsToWhitePlayer ? "white" : "black",
+        cellId: cellIdFromClick,
+      });
+      return;
+    }
+  };
 
-  const handleResetAction = useCallback(() => {
+  const handleResetAction = () => {
     setPlayersState(initialPlayersStateConfig);
     setActivePromotion(undefined);
-  }, []);
+  };
 
   /* - - - - - - - - - Rulers - - - - - - - - - - */
 
@@ -305,6 +290,13 @@ function App() {
 
         {renderCells()}
       </BoardHolder>
+
+      <LastMoveByHolder className="last-move-by">
+        <MockCell className="mock-cell">
+          {lastMoveBy && <Checker isLightColor={lastMoveBy === "white"} isInPromotion={false} />}
+        </MockCell>
+        <span>last step from</span>
+      </LastMoveByHolder>
 
       <ControlsHolder className="controls-holder">
         <button onClick={handleResetAction}>Reset</button>

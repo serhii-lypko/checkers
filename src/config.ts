@@ -7,8 +7,5 @@ export const boardSettings = {
   colors: {
     black: "rgb(172, 125, 91)",
     white: "rgb(237, 213, 174)",
-
-    // black: "black",
-    // white: "white",
   },
 };
