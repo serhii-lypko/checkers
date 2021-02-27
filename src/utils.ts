@@ -19,7 +19,7 @@ export function createBoardSetup() {
         x,
         y,
         id: `${x}${y}`,
-        color: (isDarkColor ? "dark" : "light"),
+        color: (isDarkColor ? "dark" : "light"), // TODO: make as a constants
       });
 
       isDarkColor = !isDarkColor;
@@ -35,14 +35,13 @@ export function createBoardSetup() {
 export function createInitialGameState(boardSetup) {
   const lightPlayerHorizontals = [1, 2, 3];
   const darkPlayerHorizontals = [6, 7, 8];
-  const takenHorizontals = [...lightPlayerHorizontals, ...darkPlayerHorizontals];
+  const initialHorizontals = [...lightPlayerHorizontals, ...darkPlayerHorizontals];
 
   return boardSetup.reduce((state, { id, y, color }) => {
-    const cellIsRelevant = color === "dark" && takenHorizontals.includes(y);
+    const cellIsMatch = color === "dark" && initialHorizontals.includes(y); // TODO: naming?
     const cellState = {
       id,
-      // owner: cellIsRelevant ? darkPlayerHorizontals.includes(y) ? "dark" : "light" : undefined
-      owner: id === "e3" ? "light" : undefined
+      owner: cellIsMatch ? darkPlayerHorizontals.includes(y) ? "dark" : "light" : undefined
     };
 
     return [...state, cellState];
@@ -80,57 +79,3 @@ export function findElementBetween(list, first, last) {
 
   return list[indexOfElementBetween];
 }
-
-// why do I need this??
-export function getPlayersCheckersIds(players) {
-  const { white, black } = players;
-
-  const whitePlayerCheckers = white.map((checkerConfig) => checkerConfig.id);
-  const blackPlayerCheckers = black.map((checkerConfig) => checkerConfig.id);
-
-  return {
-    whitePlayerCheckers,
-    blackPlayerCheckers,
-  };
-}
-
-// export function createInitialPlayersStateConfig(args) {
-//   // const { boardConfig, diagonalsCreator } = args;
-//   // const { cellsNumber } = boardSettings;
-//
-//   // const diagonals = diagonalsCreator();
-//
-//   // TODO: create initial checkers collection programmatically
-//
-//   const white = [
-//     { id: "a1", kind: "default" },
-//     // { id: "b2", kind: "default" },
-//     // { id: "a3", kind: "default" },
-//     // { id: "c1", kind: "default" },
-//     // { id: "d2", kind: "default" },
-//     // { id: "c3", kind: "default" },
-//     // { id: "e1", kind: "default" },
-//     // { id: "f2", kind: "default" },
-//     // { id: "e3", kind: "default" },
-//     // { id: "g1", kind: "default" },
-//     // { id: "h2", kind: "default" },
-//     // { id: "g3", kind: "default" },
-//   ];
-//
-//   const black = [
-//     // { id: "a7", kind: "default" },
-//     // { id: "b8", kind: "default" },
-//     // { id: "b6", kind: "default" },
-//     // { id: "c7", kind: "default" },
-//     // { id: "d8", kind: "default" },
-//     // { id: "d6", kind: "default" },
-//     // { id: "e7", kind: "default" },
-//     // { id: "f8", kind: "default" },
-//     // { id: "f6", kind: "default" },
-//     // { id: "g7", kind: "default" },
-//     // { id: "h8", kind: "default" },
-//     // { id: "h6", kind: "default" },
-//   ];
-//
-//   return { white, black };
-// }

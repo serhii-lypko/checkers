@@ -52,6 +52,7 @@ export const Checker = styled.div<{ isLightColor: boolean;}>`
   height: ${cellWidth - 20}px;
   background: ${(p) => (p.isLightColor ? "white" : "#333")};
   border-radius: 50%;
+  overflow: hidden;
 `;
 
 /* - - - - - - - - - - - - - - - - - - - */

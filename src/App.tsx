@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 
-import { DndProvider } from "react-dnd";
+import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
 import {
@@ -42,6 +42,48 @@ import {
 /* - - - - - - - - - - - - - - - - - - - */
 /* - - - - - - - - - - - - - - - - - - - */
 
+function CheckerComponent({ cellState }) {
+  const [{ isDragging }, drag] = useDrag(() => ({
+    item: { type: "checker", id: cellState.id },
+    collect: (monitor) => ({
+      isDragging: monitor.isDragging()
+    })
+  }));
+
+  if (!cellState || !cellState.owner) return <div>.</div>;
+
+  return (
+    <Checker
+      ref={drag}
+      isLightColor={cellState.owner === "light"}
+      // style={{ opacity: isDragging ? 0.5 : 1, }}
+    />
+  )
+}
+
+function CellComponent({ id, ui, callback, children }) {
+  const [{ isOver, canDrop }, drop] = useDrop(
+    () => ({
+      accept: "checker",
+      drop: (data) => {
+        callback((data as any).id, id) // FIXME
+      },
+      canDrop: () => true,
+      collect: (monitor) => ({
+        isOver: monitor.isOver(),
+        canDrop: monitor.canDrop()
+      })
+    }),
+    [id, callback]
+  );
+
+  return (
+    <Cell ref={drop} ui={ui} className="cell">
+      {children}
+    </Cell>
+  )
+}
+
 
 const boardSetup = createBoardSetup();
 const initialGameState = createInitialGameState(boardSetup);
@@ -49,17 +91,7 @@ const initialGameState = createInitialGameState(boardSetup);
 // const diagonals = createDiagonals();
 
 function App() {
-  const [gameState, updateGameState]= useState(initialGameState);
-
-  // console.log('gameState: ', gameState);
-
-  // const [playersState, setPlayersState] = useState(initialPlayersStateConfig);
-  // const [activePromotion, setActivePromotion] = useState(undefined);
-  // const [lastMoveBy, setLastMoveBy] = useState(undefined);
-
-  // console.log("boardSetup: ", boardSetup);
-  // console.log("playersState: ", playersState);
-  // console.log("-----------------------");
+  const [gameState, commitGameStateChange] = useState(initialGameState);
 
   /* - - - - - - - - - - - - - - - - - - - */
 
@@ -254,27 +286,43 @@ function App() {
     return boardSetup.map((cell) => {
       const { x, y, id, color } = cell;
 
-      const yFactor = (boardSettings.cellsNumber - y) * boardSettings.cellWidth;
-      const xFactor = boardSettings.alphabet.indexOf(x) * boardSettings.cellWidth;
-
       const cellUI = {
-        top: yFactor,
-        left: xFactor,
+        top: (boardSettings.cellsNumber - y) * boardSettings.cellWidth,
+        left: boardSettings.alphabet.indexOf(x) * boardSettings.cellWidth,
         color: boardSettings.colors[color],
       };
 
       const cellState = gameState.find(gameStateCell => gameStateCell.id === id);
-      const checkerToRender = <Checker isLightColor={cellState.owner === "light"}/>;
 
       return (
-        <Cell
+        <CellComponent
+          id={id}
           key={id}
           ui={cellUI}
-          className="cell"
-          // onClick={() => handleCellClick(cell)}
+          callback={(from, to) => {
+            const updatedState = gameState.map(cellState => {
+              if (cellState.id === to) {
+                return {
+                  ...cellState,
+                  owner: "light"
+                }
+              }
+
+              // if (cellState.id === from) {
+              //   return {
+              //     ...cellState,
+              //     owner: undefined
+              //   }
+              // }
+
+              return cellState;
+            });
+
+            commitGameStateChange(updatedState);
+          }}
         >
-          {cellState.owner && checkerToRender}
-        </Cell>
+          <CheckerComponent cellState={cellState} />
+        </CellComponent>
       );
     });
   };
