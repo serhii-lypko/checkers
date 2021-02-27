@@ -1,92 +1,53 @@
 import { boardSettings } from "./config";
-import { Player, PlayersState, PlayerChecker, CellConfig, BoardConfig } from "./types";
+// import { Player, PlayersState, PlayerChecker, CellConfig, BoardConfig } from "./types";
 
-/* - - - - - - - - Board config - - - - - - - - - - */
+// TODO: ideally -> write unit tests for each util function (since they are pure, right?)
 
-function createInitialBoardConfig() {
-  const { alphabet, colors } = boardSettings;
+/* - - - - - - - - - - - - - - - - - - - */
 
-  let initialBoardState: Array<CellConfig> = [];
+export function createBoardSetup() {
+  const { alphabet } = boardSettings;
 
-  let colorFlag = false;
+  let boardSetup: Array<any> = []; // FIXME any
+  let isDarkColor = false;
 
   for (let y = 8; y >= 1; y--) {
     for (let k = 0; k < alphabet.length; k++) {
       const x = alphabet[k];
 
-      initialBoardState.push({
-        coordinates: { x, y },
+      boardSetup.push({
+        x,
+        y,
         id: `${x}${y}`,
-        color: (colorFlag ? colors.black : colors.white) as Player,
+        color: (isDarkColor ? "dark" : "light"),
       });
 
-      colorFlag = !colorFlag;
+      isDarkColor = !isDarkColor;
     }
 
-    colorFlag = !colorFlag;
+    isDarkColor = !isDarkColor;
   }
 
-  return initialBoardState;
+  return boardSetup;
 }
 
-export const boardConfig = createInitialBoardConfig();
+// TODO: make additional check to make sure this method fires only 1 time at init stage
+export function createInitialGameState(boardSetup) {
+  const lightPlayerHorizontals = [1, 2, 3];
+  const darkPlayerHorizontals = [6, 7, 8];
+  const takenHorizontals = [...lightPlayerHorizontals, ...darkPlayerHorizontals];
 
-/* - - - - - - - - - Players state config - - - - - - - - - - */
+  return boardSetup.reduce((state, { id, y, color }) => {
+    const cellIsRelevant = color === "dark" && takenHorizontals.includes(y);
+    const cellState = {
+      id,
+      // owner: cellIsRelevant ? darkPlayerHorizontals.includes(y) ? "dark" : "light" : undefined
+      owner: id === "e3" ? "light" : undefined
+    };
 
-type CreateInitialPlayersStateConfig = {
-  boardConfig: BoardConfig;
-  diagonalsCreator: () => Array<string[]>;
-};
-
-export function createInitialPlayersStateConfig(
-  args: CreateInitialPlayersStateConfig,
-): PlayersState {
-  const { boardConfig, diagonalsCreator } = args;
-  const { cellsNumber } = boardSettings;
-
-  // const diagonals = diagonalsCreator();
-
-  // TODO: create initial checkers collection programmatically
-
-  const white: PlayerChecker[] = [
-    { id: "a1", kind: "default" },
-    { id: "b2", kind: "default" },
-    { id: "a3", kind: "default" },
-    { id: "c1", kind: "default" },
-    { id: "d2", kind: "default" },
-    { id: "c3", kind: "default" },
-    { id: "e1", kind: "default" },
-    { id: "f2", kind: "default" },
-    { id: "e3", kind: "default" },
-    { id: "g1", kind: "default" },
-    { id: "h2", kind: "default" },
-    { id: "g3", kind: "default" },
-  ];
-
-  const black: PlayerChecker[] = [
-    { id: "a7", kind: "default" },
-    { id: "b8", kind: "default" },
-    { id: "b6", kind: "default" },
-    { id: "c7", kind: "default" },
-    { id: "d8", kind: "default" },
-    { id: "d6", kind: "default" },
-    { id: "e7", kind: "default" },
-    { id: "f8", kind: "default" },
-    { id: "f6", kind: "default" },
-    { id: "g7", kind: "default" },
-    { id: "h8", kind: "default" },
-    { id: "h6", kind: "default" },
-  ];
-
-  return { white, black };
+    return [...state, cellState];
+  }, []);
 }
-
-export const initialPlayersStateConfig = createInitialPlayersStateConfig({
-  boardConfig,
-  diagonalsCreator: createDiagonals,
-});
-
-/* - - - - - - - - - Sub utils - - - - - - - - - - */
 
 export function createDiagonals() {
   // const { alphabet, cellsNumber } = boardConfig;
@@ -111,7 +72,17 @@ export function createDiagonals() {
   ];
 }
 
-export function getPlayersCheckersIds(players: PlayersState) {
+// TODO: rename and/or make add comments explanation
+export function findElementBetween(list, first, last) {
+  const indexOfFirstEl = list.indexOf(first);
+  const indexOfLastEl = list.indexOf(last);
+  const indexOfElementBetween = (indexOfFirstEl + indexOfLastEl) / 2;
+
+  return list[indexOfElementBetween];
+}
+
+// why do I need this??
+export function getPlayersCheckersIds(players) {
   const { white, black } = players;
 
   const whitePlayerCheckers = white.map((checkerConfig) => checkerConfig.id);
@@ -123,10 +94,43 @@ export function getPlayersCheckersIds(players: PlayersState) {
   };
 }
 
-export function findElementBetween<T>(list: Array<T>, first: T, last: T) {
-  const indexOfFirstEl = list.indexOf(first);
-  const indexOfLastEl = list.indexOf(last);
-  const indexOfElementBetween = (indexOfFirstEl + indexOfLastEl) / 2;
-
-  return list[indexOfElementBetween];
-}
+// export function createInitialPlayersStateConfig(args) {
+//   // const { boardConfig, diagonalsCreator } = args;
+//   // const { cellsNumber } = boardSettings;
+//
+//   // const diagonals = diagonalsCreator();
+//
+//   // TODO: create initial checkers collection programmatically
+//
+//   const white = [
+//     { id: "a1", kind: "default" },
+//     // { id: "b2", kind: "default" },
+//     // { id: "a3", kind: "default" },
+//     // { id: "c1", kind: "default" },
+//     // { id: "d2", kind: "default" },
+//     // { id: "c3", kind: "default" },
+//     // { id: "e1", kind: "default" },
+//     // { id: "f2", kind: "default" },
+//     // { id: "e3", kind: "default" },
+//     // { id: "g1", kind: "default" },
+//     // { id: "h2", kind: "default" },
+//     // { id: "g3", kind: "default" },
+//   ];
+//
+//   const black = [
+//     // { id: "a7", kind: "default" },
+//     // { id: "b8", kind: "default" },
+//     // { id: "b6", kind: "default" },
+//     // { id: "c7", kind: "default" },
+//     // { id: "d8", kind: "default" },
+//     // { id: "d6", kind: "default" },
+//     // { id: "e7", kind: "default" },
+//     // { id: "f8", kind: "default" },
+//     // { id: "f6", kind: "default" },
+//     // { id: "g7", kind: "default" },
+//     // { id: "h8", kind: "default" },
+//     // { id: "h6", kind: "default" },
+//   ];
+//
+//   return { white, black };
+// }

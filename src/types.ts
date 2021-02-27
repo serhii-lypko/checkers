@@ -1,10 +1,8 @@
 export type Player = "black" | "white";
 
 export type CellConfig = {
-  coordinates: {
-    x: string;
-    y: number;
-  };
+  x: string;
+  y: number;
   id: string;
   color: Player;
 };

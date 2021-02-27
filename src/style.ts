@@ -23,7 +23,7 @@ const RulerCell = styled(FlexCenter)`
 /* - - - - - - - - - - - - - - - - - - - - - - - */
 
 export const AppHolder = styled.div`
-  padding: 100px;
+  padding: 100px 75px;
 `;
 
 export const BoardHolder = styled.div`
@@ -47,13 +47,11 @@ export const Cell = styled(FlexCenter)<{ ui: CellUIProps }>`
   border: 1px solid black;
 `;
 
-export const Checker = styled.div<{ isLightColor: boolean; isInPromotion: boolean }>`
+export const Checker = styled.div<{ isLightColor: boolean;}>`
   width: ${cellWidth - 20}px;
   height: ${cellWidth - 20}px;
   background: ${(p) => (p.isLightColor ? "white" : "#333")};
   border-radius: 50%;
-  border: 3px solid
-    ${(p) => (p.isInPromotion ? (p.isLightColor ? "black" : "white") : "transparent")};
 `;
 
 /* - - - - - - - - - - - - - - - - - - - */
@@ -114,6 +112,6 @@ export const MockCell = styled(FlexCenter)`
   width: ${cellWidth}px;
   height: ${cellWidth}px;
   margin-right: 15px;
-  background: ${colors.black};
+  background: ${colors.light};
   border: 1px solid black;
 `;
