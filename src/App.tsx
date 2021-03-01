@@ -9,6 +9,8 @@ import {
   // flatten
 } from "lodash";
 
+import { CellParams, Player, CellState, OnDropPayload } from './types';
+
 // import { CellConfig, PlayersState, ActivePromotion, PromotionType, Player } from "./types";
 
 import {
@@ -39,51 +41,71 @@ import {
 
 // TODO: main -> implement typescript with NO IMPLICIT ANY
 
+
 /* - - - - - - - - - - - - - - - - - - - */
+/*
+*
+*
+* */
 /* - - - - - - - - - - - - - - - - - - - */
 
-function CheckerComponent({ cellState }) {
+
+type CheckerComponentProps = any; // FIXME
+function CheckerComponent({ cellState }: CheckerComponentProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
-    item: { type: "checker", id: cellState.id },
+    item: { type: "checker", fromId: cellState.id, fromPlayer: cellState.owner },
     collect: (monitor) => ({
       isDragging: monitor.isDragging()
     })
   }));
 
-  if (!cellState || !cellState.owner) return <div>.</div>;
+  if (!cellState || !cellState.owner) return <div />;
 
   return (
     <Checker
       ref={drag}
       isLightColor={cellState.owner === "light"}
-      // style={{ opacity: isDragging ? 0.5 : 1, }}
+      style={{ opacity: isDragging ? 0.5 : 1, }}
     />
   )
 }
 
-function CellComponent({ id, ui, callback, children }) {
+type CellComponentProps = any; // FIXME
+function CellComponent({ id, ui, gameState, onDrop, children }: CellComponentProps) {
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "checker",
-      drop: (data) => {
-        callback((data as any).id, id) // FIXME
+      drop: ({ fromId, fromPlayer }: OnDropPayload) => onDrop(fromId, fromPlayer, /*toId: */id),
+      canDrop: () => {
+        // console.log('to id: ', id);
+        return true;
       },
-      canDrop: () => true,
       collect: (monitor) => ({
         isOver: monitor.isOver(),
         canDrop: monitor.canDrop()
       })
     }),
-    [id, callback]
+    [id, onDrop, gameState]
   );
 
   return (
     <Cell ref={drop} ui={ui} className="cell">
       {children}
+
+      {!isOver && canDrop && <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          height: '100%',
+          width: '100%',
+          zIndex: 1,
+          opacity: 0.15,
+          backgroundColor: "yellow",
+        }} />}
     </Cell>
   )
 }
-
 
 const boardSetup = createBoardSetup();
 const initialGameState = createInitialGameState(boardSetup);
@@ -91,7 +113,7 @@ const initialGameState = createInitialGameState(boardSetup);
 // const diagonals = createDiagonals();
 
 function App() {
-  const [gameState, commitGameStateChange] = useState(initialGameState);
+  const [gameState, commitGameStateChange] = useState<CellState[]>(initialGameState);
 
   /* - - - - - - - - - - - - - - - - - - - */
 
@@ -244,6 +266,28 @@ function App() {
   //   setActivePromotion(undefined);
   // };
 
+  const handleOnDrop = (fromId: string, fromPlayer: Player, toId: string) => {
+    const updatedState = gameState.map(cellState => {
+      if (cellState.id === toId) {
+        return {
+          ...cellState,
+          owner: fromPlayer
+        }
+      }
+
+      if (cellState.id === fromId) {
+        return {
+          ...cellState,
+          owner: undefined
+        }
+      }
+
+      return cellState;
+    });
+
+    commitGameStateChange(updatedState);
+  };
+
   /* - - - - - - - - - Renderers - - - - - - - - - - */
 
   const renderYRuler = () => {
@@ -251,7 +295,7 @@ function App() {
 
     return (
       <YRulerContainer className="y-ruler-container">
-        {reverse(range(0, cellsNumber)).map((key, i) => {
+        {reverse(range(0, cellsNumber)).map((key: number, i: number) => {
           return (
             <YRulerCell key={key} top={key * cellWidth} className="y-ruler-cell">
               {i + 1}
@@ -299,27 +343,8 @@ function App() {
           id={id}
           key={id}
           ui={cellUI}
-          callback={(from, to) => {
-            const updatedState = gameState.map(cellState => {
-              if (cellState.id === to) {
-                return {
-                  ...cellState,
-                  owner: "light"
-                }
-              }
-
-              // if (cellState.id === from) {
-              //   return {
-              //     ...cellState,
-              //     owner: undefined
-              //   }
-              // }
-
-              return cellState;
-            });
-
-            commitGameStateChange(updatedState);
-          }}
+          gameState={gameState}
+          onDrop={handleOnDrop}
         >
           <CheckerComponent cellState={cellState} />
         </CellComponent>

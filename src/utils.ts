@@ -1,11 +1,15 @@
 import { boardSettings } from "./config";
 // import { Player, PlayersState, PlayerChecker, CellConfig, BoardConfig } from "./types";
 
+import { CellParams } from "./types";
+
+type BoardSetup = CellParams[];
+
 // TODO: ideally -> write unit tests for each util function (since they are pure, right?)
 
 /* - - - - - - - - - - - - - - - - - - - */
 
-export function createBoardSetup() {
+export function createBoardSetup(): BoardSetup {
   const { alphabet } = boardSettings;
 
   let boardSetup: Array<any> = []; // FIXME any
@@ -31,13 +35,14 @@ export function createBoardSetup() {
   return boardSetup;
 }
 
+// FIXME: types
 // TODO: make additional check to make sure this method fires only 1 time at init stage
-export function createInitialGameState(boardSetup) {
+export function createInitialGameState(boardSetup: BoardSetup) {
   const lightPlayerHorizontals = [1, 2, 3];
   const darkPlayerHorizontals = [6, 7, 8];
   const initialHorizontals = [...lightPlayerHorizontals, ...darkPlayerHorizontals];
 
-  return boardSetup.reduce((state, { id, y, color }) => {
+  return (boardSetup as any).reduce((state: any, { id, y, color }: any) => { // FIXME: types
     const cellIsMatch = color === "dark" && initialHorizontals.includes(y); // TODO: naming?
     const cellState = {
       id,
@@ -72,7 +77,8 @@ export function createDiagonals() {
 }
 
 // TODO: rename and/or make add comments explanation
-export function findElementBetween(list, first, last) {
+// FIXME: types
+export function findElementBetween(list: any, first: any, last: any) {
   const indexOfFirstEl = list.indexOf(first);
   const indexOfLastEl = list.indexOf(last);
   const indexOfElementBetween = (indexOfFirstEl + indexOfLastEl) / 2;

@@ -33,21 +33,19 @@ export const BoardHolder = styled.div`
 `;
 
 export const Cell = styled(FlexCenter)<{ ui: CellUIProps }>`
-  display: flex;
-  justify-content: center;
-  align-items: center;
   position: absolute;
   top: ${(p) => p.ui.top}px;
   left: ${(p) => p.ui.left}px;
   width: ${cellWidth}px;
   height: ${cellWidth}px;
   background: ${(p) => p.ui.color};
-  color: ${(p) => (p.ui.color === "white" ? "black" : "white")};
   outline: none;
   border: 1px solid black;
 `;
 
 export const Checker = styled.div<{ isLightColor: boolean;}>`
+  position: relative;
+  z-index: 2;
   width: ${cellWidth - 20}px;
   height: ${cellWidth - 20}px;
   background: ${(p) => (p.isLightColor ? "white" : "#333")};

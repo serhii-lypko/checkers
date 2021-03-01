@@ -1,5 +1,27 @@
-export type Player = "black" | "white";
+export type Player = "light" | "dark";
 
+export type CellParams = {
+  x: string;
+  y: number;
+  id: string;
+  color: Player;
+};
+
+export type CellState = {
+  id: string;
+  owner: Player | undefined;
+}
+
+export type OnDropPayload = {
+  type: string;
+  fromId: string;
+  fromPlayer: Player;
+}
+
+/* - - - - - - - - - - - - - - - - - - - */
+/* - - - - - - - - - - - - - - - - - - - */
+
+// outdated
 export type CellConfig = {
   x: string;
   y: number;
