@@ -20,7 +20,7 @@ import {
 import {
   createBoardSetup,
   createInitialGameState,
-  // createDiagonals,
+  createDiagonals,
   // getPlayersCheckersIds,
   // findElementBetween,
 } from "./utils";
@@ -29,6 +29,7 @@ import {
   AppHolder,
   BoardHolder,
   Cell,
+  Overlay,
   Checker,
   YRulerContainer,
   XRulerContainer,
@@ -44,7 +45,16 @@ import {
 
 /* - - - - - - - - - - - - - - - - - - - */
 /*
-*
+* 1. Possible moves highlighting ✅
+* 2. Capturing enemy checker
+* 3. Create diagonals programmatically
+* 4. King checkers mechanic
+* 5. Allow only move forward
+* 6. Additional logic: undo-redo, score etc.
+* 7. Complete typing
+* N. Unit tests for utils?
+* F. Make any optimizations?
+* LAST: Structure organization & refactoring
 *
 * */
 /* - - - - - - - - - - - - - - - - - - - */
@@ -53,11 +63,11 @@ import {
 type CheckerComponentProps = any; // FIXME
 function CheckerComponent({ cellState }: CheckerComponentProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
-    item: { type: "checker", fromId: cellState.id, fromPlayer: cellState.owner },
+    item: { type: "checker", fromCellId: cellState.id, fromPlayer: cellState.owner },
     collect: (monitor) => ({
       isDragging: monitor.isDragging()
     })
-  }));
+  }), [cellState]);
 
   if (!cellState || !cellState.owner) return <div />;
 
@@ -70,15 +80,29 @@ function CheckerComponent({ cellState }: CheckerComponentProps) {
   )
 }
 
-type CellComponentProps = any; // FIXME
-function CellComponent({ id, ui, gameState, onDrop, children }: CellComponentProps) {
+type CellComponentProps = {
+  id: string;
+  ui: any; // FIXME
+  onDrop: any; // FIXME
+  gameState: CellState[];
+  children: React.ReactNode;
+  diagonals: Array<string[]>;
+};
+function CellComponent({ id, ui, onDrop, gameState, diagonals, children }: CellComponentProps) {
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "checker",
-      drop: ({ fromId, fromPlayer }: OnDropPayload) => onDrop(fromId, fromPlayer, /*toId: */id),
-      canDrop: () => {
-        // console.log('to id: ', id);
-        return true;
+      drop: ({ fromCellId, fromPlayer }: OnDropPayload) => onDrop(fromCellId, fromPlayer, /*toCellId: */id),
+      canDrop: ({ fromCellId }) => {
+        // TODO: place all this logic into separate method?
+        const validDiagonals = diagonals.filter(dg => dg.includes(fromCellId));
+        const validCells = validDiagonals.reduce((cells: string[], diagonal: string[]) => {
+          return [...cells, ...diagonal];
+        }, []);
+
+        const cellIsTaken = !!gameState.find(cellState => cellState.id === id)?.owner;
+
+        return validCells.includes(id) && !cellIsTaken; // TODO: allow to make moves only forward
       },
       collect: (monitor) => ({
         isOver: monitor.isOver(),
@@ -91,18 +115,7 @@ function CellComponent({ id, ui, gameState, onDrop, children }: CellComponentPro
   return (
     <Cell ref={drop} ui={ui} className="cell">
       {children}
-
-      {!isOver && canDrop && <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          height: '100%',
-          width: '100%',
-          zIndex: 1,
-          opacity: 0.15,
-          backgroundColor: "yellow",
-        }} />}
+      {!isOver && canDrop && <Overlay className="overlay" />}
     </Cell>
   )
 }
@@ -110,163 +123,12 @@ function CellComponent({ id, ui, gameState, onDrop, children }: CellComponentPro
 const boardSetup = createBoardSetup();
 const initialGameState = createInitialGameState(boardSetup);
 
-// const diagonals = createDiagonals();
+const diagonals = createDiagonals();
 
 function App() {
   const [gameState, commitGameStateChange] = useState<CellState[]>(initialGameState);
 
-  /* - - - - - - - - - - - - - - - - - - - */
-
-  // const definePromotionType = (initialCell, destinationCell) => {
-  //   const allowedDiagonals = diagonals.filter((diagonal) => diagonal.includes(initialCell));
-  //   const allowedCoordinates = flatten(allowedDiagonals);
-  //   const diagonalPromotionIsCorrect = allowedCoordinates.includes(destinationCell);
-  //
-  //   if (!diagonalPromotionIsCorrect) return { promotionType: "incorrect" };
-  //
-  //   /* - - - - - - - - - - - - - - - - - - - */
-  //
-  //   const chosenPromotionDiagonal = allowedDiagonals.find((diagonal) =>
-  //     diagonal.includes(destinationCell),
-  //   );
-  //
-  //   const initialPositionIndex = chosenPromotionDiagonal?.indexOf(initialCell);
-  //   const destinationPositionIndex = chosenPromotionDiagonal?.indexOf(destinationCell);
-  //
-  //   const moveRangeAttempt = Math.abs(initialPositionIndex - destinationPositionIndex);
-  //
-  //   if (moveRangeAttempt === 1) return { promotionType: "basicMove" };
-  //
-  //   /* - - - - - - - - - - - - - - - - - - - */
-  //
-  //   const opponent = players.filter((player) => player !== activePromotion?.player)[0];
-  //   const opponentCheckers = playersState[opponent];
-  //
-  //   const opponentCheckersOnPromotionDiagonal = opponentCheckers.filter((checker) => {
-  //     return chosenPromotionDiagonal?.includes(checker.id);
-  //   });
-  //
-  //   if (moveRangeAttempt === 2) {
-  //     const capturingChecker = findElementBetween(
-  //       chosenPromotionDiagonal,
-  //       initialCell,
-  //       destinationCell,
-  //     );
-  //
-  //     const isCapturing = opponentCheckersOnPromotionDiagonal
-  //       .map((checker) => checker.id)
-  //       .includes(capturingChecker);
-  //
-  //     if (isCapturing) return { promotionType: "capturing", capturingChecker, opponent };
-  //   }
-  //
-  //   // in case if moveRangeAttempt is incorrect
-  //   return { promotionType: "incorrect" };
-  // };
-
-  // const makeCapturing = (destinationCell, capturingChecker, opponent) => {
-  //   if (!capturingChecker || !opponent || !activePromotion?.player) return;
-  //
-  //   const updatedPlayerState = playersState[activePromotion?.player].map((checker) => {
-  //     if (checker.id === activePromotion?.cellId) {
-  //       return {
-  //         ...checker,
-  //         id: destinationCell,
-  //       };
-  //     }
-  //
-  //     return checker;
-  //   });
-  //
-  //   const updatedOpponentState = playersState[opponent].filter((checker) => {
-  //     return checker.id !== capturingChecker;
-  //   });
-  //
-  //   const updatedPlayersState = {
-  //     [activePromotion.player]: updatedPlayerState,
-  //     [opponent]: updatedOpponentState,
-  //   };
-  //
-  //   setPlayersState(updatedPlayersState);
-  //   setActivePromotion(undefined);
-  // };
-
-  // const makeBasicMove = (destinationCell) => {
-  //   const activePlayerKey = activePromotion.player;
-  //   const playerState = playersState[activePlayerKey];
-  //
-  //   const updatedPlayerState = playerState.map((checker) => {
-  //     if (checker.id === activePromotion?.cellId) {
-  //       return {
-  //         ...checker,
-  //         id: destinationCell,
-  //       };
-  //     }
-  //
-  //     return checker;
-  //   });
-  //
-  //   setPlayersState({
-  //     ...playersState,
-  //     [activePlayerKey]: updatedPlayerState,
-  //   });
-  //   setActivePromotion(undefined);
-  // };
-
-  // const handleCellClick = ({ id: cellIdFromClick }) => {
-  //   const { whitePlayerCheckers, blackPlayerCheckers } = getPlayersCheckersIds(playersState);
-  //
-  //   if (cellIdFromClick === activePromotion?.cellId) {
-  //     setActivePromotion(undefined);
-  //     return;
-  //   }
-  //
-  //   const cellIsTaken =
-  //     whitePlayerCheckers.includes(cellIdFromClick) ||
-  //     blackPlayerCheckers.includes(cellIdFromClick);
-  //
-  //   if (activePromotion) {
-  //     if (cellIsTaken) return;
-  //
-  //     const { promotionType, capturingChecker, opponent } = definePromotionType(
-  //       activePromotion.cellId,
-  //       cellIdFromClick,
-  //     );
-  //
-  //     if (promotionType !== "incorrect") {
-  //       setLastMoveBy(activePromotion.player);
-  //     }
-  //
-  //     switch (promotionType) {
-  //       case "basicMove":
-  //         makeBasicMove(cellIdFromClick);
-  //         return;
-  //       case "capturing":
-  //         makeCapturing(cellIdFromClick, capturingChecker, opponent);
-  //
-  //         return;
-  //       case "incorrect":
-  //         return;
-  //     }
-  //   }
-  //
-  //   if (cellIsTaken) {
-  //     const belongsToWhitePlayer = whitePlayerCheckers.includes(cellIdFromClick);
-  //
-  //     setActivePromotion({
-  //       player: belongsToWhitePlayer ? "white" : "black",
-  //       cellId: cellIdFromClick,
-  //     });
-  //     return;
-  //   }
-  // };
-
-  // const handleResetAction = () => {
-  //   setPlayersState(initialPlayersStateConfig);
-  //   setActivePromotion(undefined);
-  // };
-
-  const handleOnDrop = (fromId: string, fromPlayer: Player, toId: string) => {
+  const handleOnDrop = (fromCellId: string, fromPlayer: Player, toId: string) => {
     const updatedState = gameState.map(cellState => {
       if (cellState.id === toId) {
         return {
@@ -275,7 +137,7 @@ function App() {
         }
       }
 
-      if (cellState.id === fromId) {
+      if (cellState.id === fromCellId) {
         return {
           ...cellState,
           owner: undefined
@@ -343,8 +205,9 @@ function App() {
           id={id}
           key={id}
           ui={cellUI}
-          gameState={gameState}
           onDrop={handleOnDrop}
+          gameState={gameState}
+          diagonals={diagonals}
         >
           <CheckerComponent cellState={cellState} />
         </CellComponent>

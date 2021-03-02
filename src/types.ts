@@ -14,7 +14,7 @@ export type CellState = {
 
 export type OnDropPayload = {
   type: string;
-  fromId: string;
+  fromCellId: string;
   fromPlayer: Player;
 }
 

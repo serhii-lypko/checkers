@@ -43,6 +43,17 @@ export const Cell = styled(FlexCenter)<{ ui: CellUIProps }>`
   border: 1px solid black;
 `;
 
+export const Overlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  opacity: 0.25;
+  background: yellow;
+`;
+
 export const Checker = styled.div<{ isLightColor: boolean;}>`
   position: relative;
   z-index: 2;
