@@ -18,8 +18,17 @@ export type OnDropPayload = {
   fromPlayer: Player;
 }
 
+export type GameState = {
+  [key: string]: {
+    isKing: boolean;
+    belongsTo?: Player;
+  }
+}
+
 /* - - - - - - - - - - - - - - - - - - - */
 /* - - - - - - - - - - - - - - - - - - - */
+
+// FIXME: remove outdated types?
 
 // outdated
 export type CellConfig = {

@@ -1,7 +1,7 @@
 import { boardSettings } from "./config";
 // import { Player, PlayersState, PlayerChecker, CellConfig, BoardConfig } from "./types";
 
-import { CellParams } from "./types";
+import { CellParams, GameState, Player } from "./types";
 
 type BoardSetup = CellParams[];
 
@@ -9,10 +9,10 @@ type BoardSetup = CellParams[];
 
 /* - - - - - - - - - - - - - - - - - - - */
 
-export function createBoardSetup(): BoardSetup {
+export function createBoardSetup() {
   const { alphabet } = boardSettings;
 
-  let boardSetup: Array<any> = []; // FIXME any
+  let boardSetup: BoardSetup = [];
   let isDarkColor = false;
 
   for (let y = 8; y >= 1; y--) {
@@ -35,28 +35,32 @@ export function createBoardSetup(): BoardSetup {
   return boardSetup;
 }
 
-// FIXME: types
-// TODO: make additional check to make sure this method fires only 1 time at init stage
-export function createInitialGameState(boardSetup: BoardSetup) {
+
+// TODO: use dark | light as constants
+export function createInitialGameState(boardSetup: BoardSetup): GameState {
   const lightPlayerHorizontals = [1, 2, 3];
   const darkPlayerHorizontals = [6, 7, 8];
   const initialHorizontals = [...lightPlayerHorizontals, ...darkPlayerHorizontals];
 
-  return (boardSetup as any).reduce((state: any, { id, y, color }: any) => { // FIXME: types
-    const cellIsMatch = color === "dark" && initialHorizontals.includes(y); // TODO: naming?
-    const cellState = {
-      id,
-      owner: cellIsMatch ? darkPlayerHorizontals.includes(y) ? "dark" : "light" : undefined
-    };
+  return boardSetup.reduce((state: object, { id, y, color }: CellParams) => {
+    const cellIsRelevant = color === "dark" && initialHorizontals.includes(y);
+    const belongsTo = cellIsRelevant
+      ? darkPlayerHorizontals.includes(y) ? "dark" : "light"
+      : undefined;
 
-    return [...state, cellState];
-  }, []);
+    return {
+      ...state,
+      [id]: {
+        belongsTo: belongsTo as Player | undefined,
+        isKing: false,
+      }
+    }
+  }, {});
 }
 
+// TODO: create diagonals programmatically
 export function createDiagonals() {
   // const { alphabet, cellsNumber } = boardConfig;
-
-  // TODO: create diagonals programmatically
 
   return [
     ["g1", "h2"],

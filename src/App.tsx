@@ -6,10 +6,11 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import {
   range,
   reverse,
-  flatten
+  flatten,
+  mapValues
 } from "lodash";
 
-import { CellParams, Player, CellState, OnDropPayload } from './types';
+import { CellParams, GameState, Player, CellState, OnDropPayload } from './types';
 
 // import { CellConfig, PlayersState, ActivePromotion, PromotionType, Player } from "./types";
 
@@ -54,28 +55,24 @@ import {
 * 6. Additional logic: undo-redo, score etc.
 * 7. Complete typing
 * N. Unit tests for utils?
-* LAST: Structure organization & refactoring
+* LAST: Structure organization & refactoring, refactoring styles
 *
 * */
 /* - - - - - - - - - - - - - - - - - - - */
 
-type GameState = CellState[];
-
 type CheckerComponentProps = any; // FIXME
-function CheckerComponent({ cellState }: CheckerComponentProps) {
+function CheckerComponent({ cellId, cellState }: CheckerComponentProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
-    item: { type: "checker", fromCellId: cellState.id, fromPlayer: cellState.owner },
-    collect: (monitor) => ({
-      isDragging: monitor.isDragging()
-    })
-  }), [cellState]);
+    item: { type: "checker", fromCellId: cellId, fromPlayer: cellState.belongsTo },
+    collect: (monitor) => ({ isDragging: monitor.isDragging() })
+  }), [cellState, cellId]);
 
-  if (!cellState || !cellState.owner) return <div />;
+  if (!cellState || !cellState.belongsTo) return <div />;
 
   return (
     <Checker
       ref={drag}
-      isLightColor={cellState.owner === "light"}
+      isLightColor={cellState.belongsTo === "light"}
       style={{ opacity: isDragging ? 0.5 : 1, }}
     />
   )
@@ -86,52 +83,79 @@ type CellComponentProps = {
   ui: any; // FIXME
   onDrop: any; // FIXME
   gameState: GameState;
-  cellOwner: Player | undefined;
+  cellBelongsTo?: Player;
   children: React.ReactNode;
 };
 
 // TODO: typing params to make shorter notation
-function canDropHandler(fromCellId: string, toCellId: string, fromPlayer: Player, gameState: GameState, cellOwner?: string) {
+function canDropHandler(fromCellId: string, toCellId: string, fromPlayer: Player, gameState: GameState, cellBelongsTo?: string) {
   const validDiagonals = diagonals.filter(dg => dg.includes(fromCellId));
+
+  const { isKing } = gameState[fromCellId];
+
   const validDiagonalsWithValidCells = validDiagonals.map(diagonal => {
     const indexOfInitialCell = diagonal.indexOf(fromCellId);
 
     return diagonal.filter((cell, i) => {
-      const delta = i - indexOfInitialCell;
+      const promotionRangeAttempt = Math.abs(i - indexOfInitialCell);
 
-      if (Math.abs(delta) === 2) {
-        const k = fromPlayer === "dark" ? -1 : 1;
-        const cellInBetweenId = diagonal[indexOfInitialCell + k];
-        const cellInBetweenState = gameState.find(cellState => cellState.id === cellInBetweenId);
-
-        return cellInBetweenState?.owner !== undefined && cellInBetweenState?.owner !== fromPlayer;
+      if (isKing) {
+        // TODO
+        return true;
       }
 
-      return Math.abs(delta) === 1;
+      switch (promotionRangeAttempt) {
+        case 1:
+          return true;
+        case 2:
+          const k = fromPlayer === "dark" ? -1 : 1;
+          const cellInBetweenId = diagonal[indexOfInitialCell + k];
+          const { belongsTo } = gameState[cellInBetweenId];
+
+          return belongsTo !== undefined && belongsTo !== fromPlayer;
+      }
+
+
+      // if (Math.abs(delta) === 2) {
+      //   const k = fromPlayer === "dark" ? -1 : 1;
+      //   const cellInBetweenId = diagonal[indexOfInitialCell + k];
+      //   const cellInBetweenState = gameState.find(cellState => cellState.id === cellInBetweenId);
+      //
+      //   return cellInBetweenState?.owner !== undefined && cellInBetweenState?.owner !== fromPlayer;
+      // }
+      //
+      // return Math.abs(delta) === 1;
     });
   });
 
-  return flatten(validDiagonalsWithValidCells).includes(toCellId) && cellOwner === undefined;
+  return flatten(validDiagonalsWithValidCells).includes(toCellId) && cellBelongsTo === undefined;
 }
 
-function CellComponent({ cellId, ui, onDrop, cellOwner, gameState, children }: CellComponentProps) {
+function CellComponent({ cellId, ui, onDrop, cellBelongsTo, gameState, children }: CellComponentProps) {
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "checker",
       drop: ({ fromCellId, fromPlayer }: OnDropPayload) => onDrop(fromCellId, fromPlayer, cellId),
-      canDrop: ({ fromCellId, fromPlayer }) => canDropHandler(fromCellId, cellId, fromPlayer, gameState, cellOwner),
+      canDrop: ({ fromCellId, fromPlayer }) => canDropHandler(
+        fromCellId,
+        cellId,
+        fromPlayer,
+        gameState,
+        cellBelongsTo
+      ),
       collect: (monitor) => ({
         isOver: monitor.isOver(),
         canDrop: monitor.canDrop()
       })
     }),
-    [cellId, onDrop, cellOwner, gameState]
+    [cellId, onDrop, cellBelongsTo, gameState]
   );
 
   return (
     <Cell ref={drop} ui={ui} className="cell">
       {children}
       {!isOver && canDrop && <Overlay className="overlay" />}
+      {isOver && canDrop && <Overlay isDarkerBackground className="overlay" />}
     </Cell>
   )
 }
@@ -146,37 +170,20 @@ function App() {
 
   const handleOnDrop = (fromCellId: string, fromPlayer: Player, toCellId: string) => {
     const dropDiagonal = diagonals.find(dg => dg.includes(fromCellId) && dg.includes(toCellId));
-
     const elementInBetweenId = findElementBetween(dropDiagonal, fromCellId, toCellId);
 
-    const updatedState = gameState.map(cellState => {
-      if (cellState.id === elementInBetweenId) {
-        return {
-          ...cellState,
-          owner: undefined
-        }
-      }
+    const updatedState = mapValues(gameState, (cellState, key) => {
+      const variantsMap = {
+        [fromCellId]: { ...cellState, belongsTo: undefined },
+        [elementInBetweenId]: { ...cellState, belongsTo: undefined },
+        [toCellId]: { ...cellState, belongsTo: fromPlayer }
+      };
 
-      if (cellState.id === toCellId) {
-        return {
-          ...cellState,
-          owner: fromPlayer
-        }
-      }
-
-      if (cellState.id === fromCellId) {
-        return {
-          ...cellState,
-          owner: undefined
-        }
-      }
-
-      return cellState;
+      return Object.keys(variantsMap).includes(key) ? variantsMap[key] : cellState;
     });
 
     commitGameStateChange(updatedState);
   };
-
 
   /* - - - - - - - - - Renderers - - - - - - - - - - */
 
@@ -226,7 +233,7 @@ function App() {
         color: boardSettings.colors[color],
       };
 
-      const cellState = gameState.find(gameStateCell => gameStateCell.id === id);
+      const cellState = gameState[id];
 
       return (
         <CellComponent
@@ -235,9 +242,9 @@ function App() {
           ui={cellUI}
           onDrop={handleOnDrop}
           gameState={gameState}
-          cellOwner={cellState?.owner}
+          cellBelongsTo={cellState.belongsTo}
         >
-          <CheckerComponent cellState={cellState} />
+          <CheckerComponent cellId={id} cellState={cellState} />
         </CellComponent>
       );
     });
