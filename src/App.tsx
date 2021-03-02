@@ -6,7 +6,7 @@ import { HTML5Backend } from "react-dnd-html5-backend";
 import {
   range,
   reverse,
-  // flatten
+  flatten
 } from "lodash";
 
 import { CellParams, Player, CellState, OnDropPayload } from './types';
@@ -22,7 +22,7 @@ import {
   createInitialGameState,
   createDiagonals,
   // getPlayersCheckersIds,
-  // findElementBetween,
+  findElementBetween,
 } from "./utils";
 
 import {
@@ -45,20 +45,21 @@ import {
 
 /* - - - - - - - - - - - - - - - - - - - */
 /*
-* 1. Possible moves highlighting ✅
-* 2. Capturing enemy checker
+* 0. Possible moves highlighting ✅
+* 1. Capturing enemy checker
+* 2. Allow moves depends who moved last -> observing captures
 * 3. Create diagonals programmatically
 * 4. King checkers mechanic
 * 5. Allow only move forward
 * 6. Additional logic: undo-redo, score etc.
 * 7. Complete typing
 * N. Unit tests for utils?
-* F. Make any optimizations?
 * LAST: Structure organization & refactoring
 *
 * */
 /* - - - - - - - - - - - - - - - - - - - */
 
+type GameState = CellState[];
 
 type CheckerComponentProps = any; // FIXME
 function CheckerComponent({ cellState }: CheckerComponentProps) {
@@ -81,35 +82,50 @@ function CheckerComponent({ cellState }: CheckerComponentProps) {
 }
 
 type CellComponentProps = {
-  id: string;
+  cellId: string;
   ui: any; // FIXME
   onDrop: any; // FIXME
-  gameState: CellState[];
+  gameState: GameState;
+  cellOwner: Player | undefined;
   children: React.ReactNode;
-  diagonals: Array<string[]>;
 };
-function CellComponent({ id, ui, onDrop, gameState, diagonals, children }: CellComponentProps) {
+
+// TODO: typing params to make shorter notation
+function canDropHandler(fromCellId: string, toCellId: string, fromPlayer: Player, gameState: GameState, cellOwner?: string) {
+  const validDiagonals = diagonals.filter(dg => dg.includes(fromCellId));
+  const validDiagonalsWithValidCells = validDiagonals.map(diagonal => {
+    const indexOfInitialCell = diagonal.indexOf(fromCellId);
+
+    return diagonal.filter((cell, i) => {
+      const delta = i - indexOfInitialCell;
+
+      if (Math.abs(delta) === 2) {
+        const k = fromPlayer === "dark" ? -1 : 1;
+        const cellInBetweenId = diagonal[indexOfInitialCell + k];
+        const cellInBetweenState = gameState.find(cellState => cellState.id === cellInBetweenId);
+
+        return cellInBetweenState?.owner !== undefined && cellInBetweenState?.owner !== fromPlayer;
+      }
+
+      return Math.abs(delta) === 1;
+    });
+  });
+
+  return flatten(validDiagonalsWithValidCells).includes(toCellId) && cellOwner === undefined;
+}
+
+function CellComponent({ cellId, ui, onDrop, cellOwner, gameState, children }: CellComponentProps) {
   const [{ isOver, canDrop }, drop] = useDrop(
     () => ({
       accept: "checker",
-      drop: ({ fromCellId, fromPlayer }: OnDropPayload) => onDrop(fromCellId, fromPlayer, /*toCellId: */id),
-      canDrop: ({ fromCellId }) => {
-        // TODO: place all this logic into separate method?
-        const validDiagonals = diagonals.filter(dg => dg.includes(fromCellId));
-        const validCells = validDiagonals.reduce((cells: string[], diagonal: string[]) => {
-          return [...cells, ...diagonal];
-        }, []);
-
-        const cellIsTaken = !!gameState.find(cellState => cellState.id === id)?.owner;
-
-        return validCells.includes(id) && !cellIsTaken; // TODO: allow to make moves only forward
-      },
+      drop: ({ fromCellId, fromPlayer }: OnDropPayload) => onDrop(fromCellId, fromPlayer, cellId),
+      canDrop: ({ fromCellId, fromPlayer }) => canDropHandler(fromCellId, cellId, fromPlayer, gameState, cellOwner),
       collect: (monitor) => ({
         isOver: monitor.isOver(),
         canDrop: monitor.canDrop()
       })
     }),
-    [id, onDrop, gameState]
+    [cellId, onDrop, cellOwner, gameState]
   );
 
   return (
@@ -126,11 +142,22 @@ const initialGameState = createInitialGameState(boardSetup);
 const diagonals = createDiagonals();
 
 function App() {
-  const [gameState, commitGameStateChange] = useState<CellState[]>(initialGameState);
+  const [gameState, commitGameStateChange] = useState<GameState>(initialGameState);
 
-  const handleOnDrop = (fromCellId: string, fromPlayer: Player, toId: string) => {
+  const handleOnDrop = (fromCellId: string, fromPlayer: Player, toCellId: string) => {
+    const dropDiagonal = diagonals.find(dg => dg.includes(fromCellId) && dg.includes(toCellId));
+
+    const elementInBetweenId = findElementBetween(dropDiagonal, fromCellId, toCellId);
+
     const updatedState = gameState.map(cellState => {
-      if (cellState.id === toId) {
+      if (cellState.id === elementInBetweenId) {
+        return {
+          ...cellState,
+          owner: undefined
+        }
+      }
+
+      if (cellState.id === toCellId) {
         return {
           ...cellState,
           owner: fromPlayer
@@ -149,6 +176,7 @@ function App() {
 
     commitGameStateChange(updatedState);
   };
+
 
   /* - - - - - - - - - Renderers - - - - - - - - - - */
 
@@ -202,12 +230,12 @@ function App() {
 
       return (
         <CellComponent
-          id={id}
+          cellId={id}
           key={id}
           ui={cellUI}
           onDrop={handleOnDrop}
           gameState={gameState}
-          diagonals={diagonals}
+          cellOwner={cellState?.owner}
         >
           <CheckerComponent cellState={cellState} />
         </CellComponent>
