@@ -7,7 +7,8 @@ import {
   range,
   reverse,
   flatten,
-  mapValues
+  mapValues,
+  isEmpty
 } from "lodash";
 
 import { CellParams, GameState, Player, CellState, OnDropPayload } from './types';
@@ -46,20 +47,21 @@ import {
 
 /* - - - - - - - - - - - - - - - - - - - */
 /*
-* 0. Possible moves highlighting ✅
-* 1. Capturing enemy checker
-* 2. Allow moves depends who moved last -> observing captures
-* 3. Create diagonals programmatically
-* 4. King checkers mechanic
-* 5. Allow only move forward
-* 6. Additional logic: undo-redo, score etc.
-* 7. Complete typing
-* N. Unit tests for utils?
+* - Possible moves highlighting ✅
+* - Capturing enemy checker ✅
+* - King checkers mechanic
+* - Allow only move forward
+* - Additional logic: undo-redo, score etc.
+* - Complete typing
+* - Unit tests for utils?
+* - Create diagonals programmatically
 * LAST: Structure organization & refactoring, refactoring styles
 *
 * */
 /* - - - - - - - - - - - - - - - - - - - */
 
+
+// TODO: types
 type CheckerComponentProps = any; // FIXME
 function CheckerComponent({ cellId, cellState }: CheckerComponentProps) {
   const [{ isDragging }, drag] = useDrag(() => ({
@@ -78,6 +80,7 @@ function CheckerComponent({ cellId, cellState }: CheckerComponentProps) {
   )
 }
 
+// FIXME types
 type CellComponentProps = {
   cellId: string;
   ui: any; // FIXME
@@ -90,41 +93,41 @@ type CellComponentProps = {
 // TODO: typing params to make shorter notation
 function canDropHandler(fromCellId: string, toCellId: string, fromPlayer: Player, gameState: GameState, cellBelongsTo?: string) {
   const validDiagonals = diagonals.filter(dg => dg.includes(fromCellId));
-
   const { isKing } = gameState[fromCellId];
 
   const validDiagonalsWithValidCells = validDiagonals.map(diagonal => {
     const indexOfInitialCell = diagonal.indexOf(fromCellId);
 
     return diagonal.filter((cell, i) => {
-      const promotionRangeAttempt = Math.abs(i - indexOfInitialCell);
+      const direction = i < indexOfInitialCell ? "bottom" : "top";
+      const promotionRangeVariant = Math.abs(i - indexOfInitialCell);
 
       if (isKing) {
         // TODO
         return true;
       }
 
-      switch (promotionRangeAttempt) {
-        case 1:
-          return true;
-        case 2:
-          const k = fromPlayer === "dark" ? -1 : 1;
-          const cellInBetweenId = diagonal[indexOfInitialCell + k];
-          const { belongsTo } = gameState[cellInBetweenId];
-
-          return belongsTo !== undefined && belongsTo !== fromPlayer;
+      if (promotionRangeVariant === 1) {
+        switch (fromPlayer) {
+          case "dark":
+            return direction === "bottom";
+          case "light":
+            return direction === "top";
+        }
       }
 
+      if (promotionRangeVariant === 2) {
+        const k = direction === "top" ? 1 : -1;
+        const nextCellState = diagonal[indexOfInitialCell + k]
+          && gameState[diagonal[indexOfInitialCell + k]];
 
-      // if (Math.abs(delta) === 2) {
-      //   const k = fromPlayer === "dark" ? -1 : 1;
-      //   const cellInBetweenId = diagonal[indexOfInitialCell + k];
-      //   const cellInBetweenState = gameState.find(cellState => cellState.id === cellInBetweenId);
-      //
-      //   return cellInBetweenState?.owner !== undefined && cellInBetweenState?.owner !== fromPlayer;
-      // }
-      //
-      // return Math.abs(delta) === 1;
+        if (nextCellState) {
+          return nextCellState.belongsTo !== undefined
+            && nextCellState.belongsTo !== fromPlayer;
+        }
+      }
+
+      return false;
     });
   });
 
@@ -138,7 +141,7 @@ function CellComponent({ cellId, ui, onDrop, cellBelongsTo, gameState, children 
       drop: ({ fromCellId, fromPlayer }: OnDropPayload) => onDrop(fromCellId, fromPlayer, cellId),
       canDrop: ({ fromCellId, fromPlayer }) => canDropHandler(
         fromCellId,
-        cellId,
+        cellId, /* toCellId */
         fromPlayer,
         gameState,
         cellBelongsTo
@@ -160,6 +163,45 @@ function CellComponent({ cellId, ui, onDrop, cellBelongsTo, gameState, children 
   )
 }
 
+const renderXRuler = () => {
+  const { alphabet, cellWidth } = boardSettings;
+
+  return (
+    <XRulerContainer className="x-ruler-container">
+      {alphabet.map((char) => {
+        return (
+          <XRulerCell
+            key={char}
+            left={alphabet.indexOf(char) * cellWidth}
+            className="x-ruler-cell"
+          >
+            {char}
+          </XRulerCell>
+        );
+      })}
+    </XRulerContainer>
+  );
+};
+
+const renderYRuler = () => {
+  const { cellsNumber, cellWidth } = boardSettings;
+
+  return (
+    <YRulerContainer className="y-ruler-container">
+      {reverse(range(0, cellsNumber)).map((key: number, i: number) => {
+        return (
+          <YRulerCell key={key} top={key * cellWidth} className="y-ruler-cell">
+            {i + 1}
+          </YRulerCell>
+        );
+      })}
+    </YRulerContainer>
+  );
+};
+
+/* - - - - - - - - - - - - - - - - - - - */
+/* - - - - - - - - - - - - - - - - - - - */
+
 const boardSetup = createBoardSetup();
 const initialGameState = createInitialGameState(boardSetup);
 
@@ -172,55 +214,17 @@ function App() {
     const dropDiagonal = diagonals.find(dg => dg.includes(fromCellId) && dg.includes(toCellId));
     const elementInBetweenId = findElementBetween(dropDiagonal, fromCellId, toCellId);
 
-    const updatedState = mapValues(gameState, (cellState, key) => {
+    const updatedState = mapValues(gameState, (cellState, cellId) => {
       const variantsMap = {
         [fromCellId]: { ...cellState, belongsTo: undefined },
         [elementInBetweenId]: { ...cellState, belongsTo: undefined },
         [toCellId]: { ...cellState, belongsTo: fromPlayer }
       };
 
-      return Object.keys(variantsMap).includes(key) ? variantsMap[key] : cellState;
+      return Object.keys(variantsMap).includes(cellId) ? variantsMap[cellId] : cellState;
     });
 
     commitGameStateChange(updatedState);
-  };
-
-  /* - - - - - - - - - Renderers - - - - - - - - - - */
-
-  const renderYRuler = () => {
-    const { cellsNumber, cellWidth } = boardSettings;
-
-    return (
-      <YRulerContainer className="y-ruler-container">
-        {reverse(range(0, cellsNumber)).map((key: number, i: number) => {
-          return (
-            <YRulerCell key={key} top={key * cellWidth} className="y-ruler-cell">
-              {i + 1}
-            </YRulerCell>
-          );
-        })}
-      </YRulerContainer>
-    );
-  };
-
-  const renderXRuler = () => {
-    const { alphabet, cellWidth } = boardSettings;
-
-    return (
-      <XRulerContainer className="x-ruler-container">
-        {alphabet.map((char) => {
-          return (
-            <XRulerCell
-              key={char}
-              left={alphabet.indexOf(char) * cellWidth}
-              className="x-ruler-cell"
-            >
-              {char}
-            </XRulerCell>
-          );
-        })}
-      </XRulerContainer>
-    );
   };
 
   const renderCells = () => {
