@@ -54,7 +54,7 @@ export const Overlay = styled.div<{ isDarkerBackground?: boolean }>`
   background: ${p => p.isDarkerBackground ? "black" : "yellow"};
 `;
 
-export const Checker = styled.div<{ isLightColor: boolean;}>`
+export const Checker = styled.div<{ isLightColor: boolean; isKing: boolean }>`
   position: relative;
   z-index: 2;
   width: ${cellWidth - 20}px;
@@ -63,6 +63,17 @@ export const Checker = styled.div<{ isLightColor: boolean;}>`
   border-radius: 50%;
   overflow: hidden;
   cursor: grab;
+  
+  &:after {
+content: "♕";
+    position: absolute;
+    top: -7px;
+    left: 10px;
+    width: 10px;
+    height: 10px;
+    font-size: 49px;
+    visibility: ${p => p.isKing ? "visible" : "hidden"};
+    color: ${(p) => (p.isLightColor ? "#333" : "white")};
   }
 `;
 

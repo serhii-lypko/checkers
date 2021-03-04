@@ -51,8 +51,10 @@ export function createInitialGameState(boardSetup: BoardSetup): GameState {
     return {
       ...state,
       [id]: {
-        belongsTo: belongsTo as Player | undefined,
-        isKing: false,
+        // belongsTo: belongsTo as Player | undefined,
+        belongsTo: (id === "f4" ? "light" : id === "h6" ? "dark" : id === "d2" ? "light" : undefined) as any,
+        isKing: id === "h6",
+        // isKing: false,
       }
     }
   }, {});
@@ -80,12 +82,3 @@ export function createDiagonals() {
   ];
 }
 
-// TODO: rename and/or make add comments explanation
-// FIXME: types
-export function findElementBetween(list: any, first: any, last: any) {
-  const indexOfFirstEl = list.indexOf(first);
-  const indexOfLastEl = list.indexOf(last);
-  const indexOfElementBetween = (indexOfFirstEl + indexOfLastEl) / 2;
-
-  return list[indexOfElementBetween];
-}

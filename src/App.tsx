@@ -11,7 +11,7 @@ import {
   isEmpty
 } from "lodash";
 
-import { CellParams, GameState, Player, CellState, OnDropPayload } from './types';
+import { CellParams, GameState, Player, OnDropPayload } from './types';
 
 // import { CellConfig, PlayersState, ActivePromotion, PromotionType, Player } from "./types";
 
@@ -24,7 +24,6 @@ import {
   createInitialGameState,
   createDiagonals,
   // getPlayersCheckersIds,
-  findElementBetween,
 } from "./utils";
 
 import {
@@ -49,8 +48,8 @@ import {
 /*
 * - Possible moves highlighting ✅
 * - Capturing enemy checker ✅
+* - Allow only move forward ✅
 * - King checkers mechanic
-* - Allow only move forward
 * - Additional logic: undo-redo, score etc.
 * - Complete typing
 * - Unit tests for utils?
@@ -74,6 +73,7 @@ function CheckerComponent({ cellId, cellState }: CheckerComponentProps) {
   return (
     <Checker
       ref={drag}
+      isKing={cellState.isKing}
       isLightColor={cellState.belongsTo === "light"}
       style={{ opacity: isDragging ? 0.5 : 1, }}
     />
@@ -90,8 +90,17 @@ type CellComponentProps = {
   children: React.ReactNode;
 };
 
-// TODO: typing params to make shorter notation
-function canDropHandler(fromCellId: string, toCellId: string, fromPlayer: Player, gameState: GameState, cellBelongsTo?: string) {
+type dropHandleProps = {
+  fromCellId: string;
+  toCellId: string;
+  fromPlayer: Player;
+  gameState: GameState;
+  cellBelongsTo?: string;
+}
+
+function canDropHandler(props: dropHandleProps) {
+  const { fromCellId, toCellId, fromPlayer, gameState, cellBelongsTo } = props;
+
   const validDiagonals = diagonals.filter(dg => dg.includes(fromCellId));
   const { isKing } = gameState[fromCellId];
 
@@ -103,8 +112,8 @@ function canDropHandler(fromCellId: string, toCellId: string, fromPlayer: Player
       const promotionRangeVariant = Math.abs(i - indexOfInitialCell);
 
       if (isKing) {
-        // TODO
-        return true;
+        // TODO: if on that direction no own cells in between or two checkers are next to each other
+        return cellBelongsTo === undefined;
       }
 
       if (promotionRangeVariant === 1) {
@@ -139,13 +148,13 @@ function CellComponent({ cellId, ui, onDrop, cellBelongsTo, gameState, children 
     () => ({
       accept: "checker",
       drop: ({ fromCellId, fromPlayer }: OnDropPayload) => onDrop(fromCellId, fromPlayer, cellId),
-      canDrop: ({ fromCellId, fromPlayer }) => canDropHandler(
+      canDrop: ({ fromCellId, fromPlayer }) => canDropHandler({
         fromCellId,
-        cellId, /* toCellId */
+        toCellId: cellId,
         fromPlayer,
         gameState,
         cellBelongsTo
-      ),
+      }),
       collect: (monitor) => ({
         isOver: monitor.isOver(),
         canDrop: monitor.canDrop()
@@ -207,18 +216,56 @@ const initialGameState = createInitialGameState(boardSetup);
 
 const diagonals = createDiagonals();
 
+type findCheckerToCaptureProps = {
+  fromCellId: string;
+  toCellId: string;
+  fromPlayer: Player;
+}
+
 function App() {
   const [gameState, commitGameStateChange] = useState<GameState>(initialGameState);
 
+  const findCheckerToCapture = (props: findCheckerToCaptureProps) => {
+    const { fromCellId, toCellId, fromPlayer } = props;
+
+    // we are confident about finding the diagonal -> so make casting
+    const diagonal = diagonals.find(dg => dg.includes(fromCellId) && dg.includes(toCellId)) as string[];
+
+    let fromIndex = diagonal.indexOf(fromCellId);
+    let toIndex = diagonal.indexOf(toCellId);
+
+    // make iteration easier with only positive progression
+    if (toIndex < fromIndex) {
+      [fromIndex, toIndex] = [toIndex, fromIndex]
+    }
+
+    for (let i = fromIndex + 1; i < toIndex; i++) {
+      const cellId = diagonal[i];
+      const cellState = gameState[cellId];
+
+      if (cellState && cellState.belongsTo !== undefined && cellState.belongsTo !== fromPlayer) {
+        return cellId;
+      }
+    }
+  };
+
   const handleOnDrop = (fromCellId: string, fromPlayer: Player, toCellId: string) => {
-    const dropDiagonal = diagonals.find(dg => dg.includes(fromCellId) && dg.includes(toCellId));
-    const elementInBetweenId = findElementBetween(dropDiagonal, fromCellId, toCellId);
+    const opponentCheckerOnPromotionRange = findCheckerToCapture({ fromCellId, toCellId, fromPlayer }) as string;
+
+    const kingTransformationCellsMap = {
+      light: ["b8", "d8", "f8", "h8"],
+      dark: ["a1", "c1", "e1", "g1"]
+    };
 
     const updatedState = mapValues(gameState, (cellState, cellId) => {
       const variantsMap = {
         [fromCellId]: { ...cellState, belongsTo: undefined },
-        [elementInBetweenId]: { ...cellState, belongsTo: undefined },
-        [toCellId]: { ...cellState, belongsTo: fromPlayer }
+        [opponentCheckerOnPromotionRange]: { ...cellState, belongsTo: undefined },
+        [toCellId]: {
+          ...cellState,
+          belongsTo: fromPlayer,
+          isKing: gameState[fromCellId].isKing || kingTransformationCellsMap[fromPlayer].includes(toCellId)
+        }
       };
 
       return Object.keys(variantsMap).includes(cellId) ? variantsMap[cellId] : cellState;
