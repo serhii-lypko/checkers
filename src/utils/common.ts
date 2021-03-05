@@ -1,13 +1,10 @@
-import { boardSettings } from "./config";
-// import { Player, PlayersState, PlayerChecker, CellConfig, BoardConfig } from "./types";
+import { boardSettings, players } from "config";
 
-import { CellParams, GameState, Player } from "./types";
-
-type BoardSetup = CellParams[];
-
-// TODO: ideally -> write unit tests for each util function (since they are pure, right?)
+import { CellParams, GameState, Player } from "types";
 
 /* - - - - - - - - - - - - - - - - - - - */
+
+type BoardSetup = CellParams[];
 
 export function createBoardSetup() {
   const { alphabet } = boardSettings;
@@ -23,7 +20,7 @@ export function createBoardSetup() {
         x,
         y,
         id: `${x}${y}`,
-        color: (isDarkColor ? "dark" : "light"), // TODO: make as a constants
+        color: (isDarkColor ? players.dark : players.light) as Player,
       });
 
       isDarkColor = !isDarkColor;
@@ -35,17 +32,15 @@ export function createBoardSetup() {
   return boardSetup;
 }
 
-
-// TODO: use dark | light as constants
 export function createInitialGameState(boardSetup: BoardSetup): GameState {
   const lightPlayerHorizontals = [1, 2, 3];
   const darkPlayerHorizontals = [6, 7, 8];
   const initialHorizontals = [...lightPlayerHorizontals, ...darkPlayerHorizontals];
 
   return boardSetup.reduce((state: object, { id, y, color }: CellParams) => {
-    const cellIsRelevant = color === "dark" && initialHorizontals.includes(y);
+    const cellIsRelevant = color === players.dark && initialHorizontals.includes(y);
     const belongsTo = cellIsRelevant
-      ? darkPlayerHorizontals.includes(y) ? "dark" : "light"
+      ? darkPlayerHorizontals.includes(y) ? players.dark : players.light
       : undefined;
 
     return {
@@ -58,7 +53,6 @@ export function createInitialGameState(boardSetup: BoardSetup): GameState {
   }, {});
 }
 
-// TODO: create diagonals programmatically
 export function createDiagonals() {
   // const { alphabet, cellsNumber } = boardConfig;
 

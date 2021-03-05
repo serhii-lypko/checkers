@@ -1,269 +1,43 @@
-import React, { useState } from "react";
+import React, { useReducer } from "react";
 
-import { DndProvider, useDrag, useDrop } from "react-dnd";
+import { DndProvider } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
+import { range, reverse, mapValues, } from "lodash";
 
-import {
-  throttle,
-  range,
-  reverse,
-  flatten,
-  mapValues,
-  isEmpty
-} from "lodash";
+import { Player } from './types';
 
-import { CellParams, GameState, Player, OnDropPayload } from './types';
+import stateManager from "./stateManager";
 
-// import { CellConfig, PlayersState, ActivePromotion, PromotionType, Player } from "./types";
+import Checker from 'components/Checker';
+import Cell from 'components/Cell';
 
-import {
-  boardSettings,
-  // players
-} from "./config";
-import {
-  createBoardSetup,
-  createInitialGameState,
-  createDiagonals,
-  // getPlayersCheckersIds,
-} from "./utils";
+import { boardSettings, } from "./config";
+import { createBoardSetup, createInitialGameState, createDiagonals } from "utils/common";
 
 import {
   AppHolder,
   BoardHolder,
-  Cell,
-  Overlay,
-  Checker,
   YRulerContainer,
   XRulerContainer,
   YRulerCell,
   XRulerCell,
-  // ControlsHolder,
-  // LastMoveByHolder,
-  // MockCell,
+  UndoButtonContainer
 } from "./style";
 
-
-/* - - - - - - - - - - - - - - - - - - - */
-/*
-* - Possible moves highlighting ✅
-* - Capturing enemy checker ✅
-* - Allow only move forward ✅
-* - King checkers mechanic ✅
-* - Additional logic: undo-redo, score etc.
-* - Complete typing
-* - Unit tests for utils?
-* - Create diagonals programmatically
-* LAST: Structure organization & refactoring, refactoring styles
-*
-* */
 /* - - - - - - - - - - - - - - - - - - - */
 
+export const boardSetup = createBoardSetup();
+export const diagonals = createDiagonals();
 
-// TODO: types
-type CheckerComponentProps = any; // FIXME
-function CheckerComponent({ cellId, cellState }: CheckerComponentProps) {
-  const [{ isDragging }, drag] = useDrag(() => ({
-    item: { type: "checker", fromCellId: cellId, fromPlayer: cellState.belongsTo },
-    collect: (monitor) => ({ isDragging: monitor.isDragging() })
-  }), [cellState, cellId]);
-
-  if (!cellState || !cellState.belongsTo) return <div />;
-
-  return (
-    <Checker
-      ref={drag}
-      isKing={cellState.isKing}
-      isLightColor={cellState.belongsTo === "light"}
-      style={{ opacity: isDragging ? 0.5 : 1, }}
-    />
-  )
-}
-
-// FIXME types
-type CellComponentProps = {
-  cellId: string;
-  ui: any; // FIXME
-  onDrop: any; // FIXME
-  gameState: GameState;
-  cellBelongsTo?: Player;
-  children: React.ReactNode;
-};
-
-type dropHandleProps = {
-  fromCellId: string;
-  toCellId: string;
-  fromPlayer: Player;
-  gameState: GameState;
-  cellBelongsTo?: string;
-}
-
-function canDropHandler(props: dropHandleProps) {
-  const { fromCellId, toCellId, fromPlayer, gameState, cellBelongsTo } = props;
-
-  const validDiagonals = diagonals.filter(dg => dg.includes(fromCellId));
-  const { isKing } = gameState[fromCellId];
-
-  const validDiagonalsWithValidCells = validDiagonals.map(diagonal => {
-    const indexOfInitialCell = diagonal.indexOf(fromCellId);
-
-    return diagonal.filter((cell, i) => {
-      const direction = i < indexOfInitialCell ? "bottom" : "top";
-      const isBottomDirection = i < indexOfInitialCell;
-
-      // - - - - - 1. checking possible king options first - - - - -
-      if (isKing) {
-        let fromIndex = indexOfInitialCell;
-        let toIndex = i;
-
-        if (toIndex < fromIndex) {
-          [fromIndex, toIndex] = [toIndex, fromIndex]
-        }
-
-        const cellsRange = diagonal
-          .slice(fromIndex + 1, toIndex)
-          .map(cellId => ({ cellId, cellState: gameState[cellId] }));
-
-        // for king checking first if move is impossible on that range
-        const hasOwnCheckerOnDirection = cellsRange
-          .some(({ cellState }) => cellState.belongsTo === fromPlayer);
-        if (hasOwnCheckerOnDirection) {
-          return false;
-        }
-
-        // then checking variants with multiple opponent checkers on range
-        const opponentCheckers = cellsRange
-          .filter(({ cellState }) => cellState.belongsTo !== undefined && cellState.belongsTo !== fromPlayer);
-
-        const checkersToCapture = isBottomDirection ? reverse(opponentCheckers) : opponentCheckers;
-
-        if (!isEmpty(checkersToCapture)) {
-          const [_, nextCheckerToCapture] = checkersToCapture;
-
-          if (nextCheckerToCapture) {
-            const indexOfNextChecker = diagonal.indexOf(nextCheckerToCapture.cellId);
-
-            return cellBelongsTo === undefined
-              && isBottomDirection ? i > indexOfNextChecker : i < indexOfNextChecker;
-          }
-        }
-
-        return cellBelongsTo === undefined;
-      }
-
-      // - - - - - 2. decide either basic move or possible capturing action - - - - -
-      const promotionRangeVariant = Math.abs(i - indexOfInitialCell);
-
-      if (promotionRangeVariant === 1) {
-        switch (fromPlayer) {
-          case "dark":
-            return direction === "bottom";
-          case "light":
-            return direction === "top";
-        }
-      }
-
-      if (promotionRangeVariant === 2) {
-        const k = direction === "top" ? 1 : -1;
-        const nextCellState = diagonal[indexOfInitialCell + k]
-          && gameState[diagonal[indexOfInitialCell + k]];
-
-        if (nextCellState) {
-          return nextCellState.belongsTo !== undefined
-            && nextCellState.belongsTo !== fromPlayer;
-        }
-      }
-
-      return false;
-    });
-  });
-
-  return flatten(validDiagonalsWithValidCells).includes(toCellId) && cellBelongsTo === undefined;
-}
-
-function CellComponent({ cellId, ui, onDrop, cellBelongsTo, gameState, children }: CellComponentProps) {
-  const [{ isOver, canDrop }, drop] = useDrop(
-    () => ({
-      accept: "checker",
-      drop: ({ fromCellId, fromPlayer }: OnDropPayload) => onDrop(fromCellId, fromPlayer, cellId),
-      canDrop: ({ fromCellId, fromPlayer }) => canDropHandler({
-        fromCellId,
-        toCellId: cellId,
-        fromPlayer,
-        gameState,
-        cellBelongsTo
-      }),
-      collect: (monitor) => ({
-        isOver: monitor.isOver(),
-        canDrop: monitor.canDrop()
-      })
-    }),
-    [cellId, onDrop, cellBelongsTo, gameState]
-  );
-
-  return (
-    <Cell ref={drop} ui={ui} className="cell">
-      {children}
-      {!isOver && canDrop && <Overlay className="overlay" />}
-      {isOver && canDrop && <Overlay isDarkerBackground className="overlay" />}
-    </Cell>
-  )
-}
-
-const renderXRuler = () => {
-  const { alphabet, cellWidth } = boardSettings;
-
-  return (
-    <XRulerContainer className="x-ruler-container">
-      {alphabet.map((char) => {
-        return (
-          <XRulerCell
-            key={char}
-            left={alphabet.indexOf(char) * cellWidth}
-            className="x-ruler-cell"
-          >
-            {char}
-          </XRulerCell>
-        );
-      })}
-    </XRulerContainer>
-  );
-};
-
-const renderYRuler = () => {
-  const { cellsNumber, cellWidth } = boardSettings;
-
-  return (
-    <YRulerContainer className="y-ruler-container">
-      {reverse(range(0, cellsNumber)).map((key: number, i: number) => {
-        return (
-          <YRulerCell key={key} top={key * cellWidth} className="y-ruler-cell">
-            {i + 1}
-          </YRulerCell>
-        );
-      })}
-    </YRulerContainer>
-  );
-};
-
-/* - - - - - - - - - - - - - - - - - - - */
-/* - - - - - - - - - - - - - - - - - - - */
-
-const boardSetup = createBoardSetup();
-const initialGameState = createInitialGameState(boardSetup);
-
-const diagonals = createDiagonals();
-
-type findCheckerToCaptureProps = {
-  fromCellId: string;
-  toCellId: string;
-  fromPlayer: Player;
-}
+const { stateReducer, initialState } = stateManager(createInitialGameState(boardSetup));
 
 function App() {
-  const [gameState, commitGameStateChange] = useState<GameState>(initialGameState);
+  const [{ gameState, gameHistory, gameStatePointer }, dispatchNewState] = useReducer(
+    stateReducer,
+    initialState
+  );
 
-  const findCheckerToCapture = (props: findCheckerToCaptureProps) => {
-    const { fromCellId, toCellId, fromPlayer } = props;
+  const findCheckerToCapture = (fromCellId: string, toCellId: string, fromPlayer: Player) => {
 
     // we are confident about finding the diagonal -> so make casting
     const diagonal = diagonals.find(dg => dg.includes(fromCellId) && dg.includes(toCellId)) as string[];
@@ -292,7 +66,7 @@ function App() {
   };
 
   const handleOnDrop = (fromCellId: string, fromPlayer: Player, toCellId: string) => {
-    const opponentCheckerOnPromotionRange = findCheckerToCapture({ fromCellId, toCellId, fromPlayer }) as string;
+    const opponentCheckerOnPromotionRange = findCheckerToCapture(fromCellId, toCellId, fromPlayer);
 
     const kingTransformationCellsMap = {
       light: ["b8", "d8", "f8", "h8"],
@@ -310,11 +84,15 @@ function App() {
         }
       };
 
-      return Object.keys(variantsMap).includes(cellId) ? variantsMap[cellId] : cellState;
+      const actionIsValid = Object.keys(variantsMap).includes(cellId);
+
+      return actionIsValid ? variantsMap[cellId] : cellState;
     });
 
-    commitGameStateChange(updatedState);
+    dispatchNewState({ type: "SET_BASIC_MOVE", updatedState })
   };
+
+  /* - - - - - - - - Renderers - - - - - - - - - - */
 
   const renderCells = () => {
     return boardSetup.map((cell) => {
@@ -329,7 +107,7 @@ function App() {
       const cellState = gameState[id];
 
       return (
-        <CellComponent
+        <Cell
           cellId={id}
           key={id}
           ui={cellUI}
@@ -337,14 +115,48 @@ function App() {
           gameState={gameState}
           cellBelongsTo={cellState.belongsTo}
         >
-          <CheckerComponent cellId={id} cellState={cellState} />
-        </CellComponent>
+          <Checker cellId={id} cellState={cellState} />
+        </Cell>
       );
     });
   };
 
-  /* - - - - - - - - - - - - - - - - - - - - - - */
+  const renderXRuler = () => {
+    const { alphabet, cellWidth } = boardSettings;
 
+    return (
+      <XRulerContainer>
+        {alphabet.map((char) => {
+          return (
+            <XRulerCell
+              key={char}
+              left={alphabet.indexOf(char) * cellWidth}
+            >
+              {char}
+            </XRulerCell>
+          );
+        })}
+      </XRulerContainer>
+    );
+  };
+
+  const renderYRuler = () => {
+    const { cellsNumber, cellWidth } = boardSettings;
+
+    return (
+      <YRulerContainer>
+        {reverse(range(0, cellsNumber)).map((key: number, i: number) => {
+          return (
+            <YRulerCell key={key} top={key * cellWidth}>
+              {i + 1}
+            </YRulerCell>
+          );
+        })}
+      </YRulerContainer>
+    );
+  };
+
+  /* - - - - - - - - - - - - - - - - - - - - - - */
   return (
     <AppHolder>
       <DndProvider backend={HTML5Backend}>
@@ -356,18 +168,19 @@ function App() {
         </BoardHolder>
       </DndProvider>
 
-      {/*<LastMoveByHolder className="last-move-by">*/}
-      {/*  <MockCell className="mock-cell">*/}
-      {/*    {lastMoveBy && <Checker isLightColor={lastMoveBy === "white"} isInPromotion={false} />}*/}
-      {/*  </MockCell>*/}
-      {/*  <span>last step from</span>*/}
-      {/*</LastMoveByHolder>*/}
-
-      {/*<ControlsHolder className="controls-holder">*/}
-      {/*  <button onClick={handleResetAction}>Reset</button>*/}
-      {/*  <button>Back</button>*/}
-      {/*  <button>Forward</button>*/}
-      {/*</ControlsHolder>*/}
+      <UndoButtonContainer>
+        <button
+          disabled={gameHistory.length === 1}
+          onClick={() => {
+            dispatchNewState({
+              type: "UNDO",
+              updatedPointer: gameStatePointer - 1
+            });
+          }}
+        >
+          Undo
+        </button>
+      </UndoButtonContainer>
     </AppHolder>
   );
 }
