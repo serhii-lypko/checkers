@@ -51,10 +51,8 @@ export function createInitialGameState(boardSetup: BoardSetup): GameState {
     return {
       ...state,
       [id]: {
-        // belongsTo: belongsTo as Player | undefined,
-        belongsTo: (id === "f4" ? "light" : id === "h6" ? "dark" : id === "d2" ? "light" : undefined) as any,
-        isKing: id === "h6",
-        // isKing: false,
+        belongsTo: belongsTo as Player | undefined,
+        isKing: false,
       }
     }
   }, {});

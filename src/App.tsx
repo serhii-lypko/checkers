@@ -4,6 +4,7 @@ import { DndProvider, useDrag, useDrop } from "react-dnd";
 import { HTML5Backend } from "react-dnd-html5-backend";
 
 import {
+  throttle,
   range,
   reverse,
   flatten,
@@ -41,15 +42,13 @@ import {
   // MockCell,
 } from "./style";
 
-// TODO: main -> implement typescript with NO IMPLICIT ANY
-
 
 /* - - - - - - - - - - - - - - - - - - - */
 /*
 * - Possible moves highlighting ✅
 * - Capturing enemy checker ✅
 * - Allow only move forward ✅
-* - King checkers mechanic
+* - King checkers mechanic ✅
 * - Additional logic: undo-redo, score etc.
 * - Complete typing
 * - Unit tests for utils?
@@ -109,12 +108,50 @@ function canDropHandler(props: dropHandleProps) {
 
     return diagonal.filter((cell, i) => {
       const direction = i < indexOfInitialCell ? "bottom" : "top";
-      const promotionRangeVariant = Math.abs(i - indexOfInitialCell);
+      const isBottomDirection = i < indexOfInitialCell;
 
+      // - - - - - 1. checking possible king options first - - - - -
       if (isKing) {
-        // TODO: if on that direction no own cells in between or two checkers are next to each other
+        let fromIndex = indexOfInitialCell;
+        let toIndex = i;
+
+        if (toIndex < fromIndex) {
+          [fromIndex, toIndex] = [toIndex, fromIndex]
+        }
+
+        const cellsRange = diagonal
+          .slice(fromIndex + 1, toIndex)
+          .map(cellId => ({ cellId, cellState: gameState[cellId] }));
+
+        // for king checking first if move is impossible on that range
+        const hasOwnCheckerOnDirection = cellsRange
+          .some(({ cellState }) => cellState.belongsTo === fromPlayer);
+        if (hasOwnCheckerOnDirection) {
+          return false;
+        }
+
+        // then checking variants with multiple opponent checkers on range
+        const opponentCheckers = cellsRange
+          .filter(({ cellState }) => cellState.belongsTo !== undefined && cellState.belongsTo !== fromPlayer);
+
+        const checkersToCapture = isBottomDirection ? reverse(opponentCheckers) : opponentCheckers;
+
+        if (!isEmpty(checkersToCapture)) {
+          const [_, nextCheckerToCapture] = checkersToCapture;
+
+          if (nextCheckerToCapture) {
+            const indexOfNextChecker = diagonal.indexOf(nextCheckerToCapture.cellId);
+
+            return cellBelongsTo === undefined
+              && isBottomDirection ? i > indexOfNextChecker : i < indexOfNextChecker;
+          }
+        }
+
         return cellBelongsTo === undefined;
       }
+
+      // - - - - - 2. decide either basic move or possible capturing action - - - - -
+      const promotionRangeVariant = Math.abs(i - indexOfInitialCell);
 
       if (promotionRangeVariant === 1) {
         switch (fromPlayer) {
@@ -234,19 +271,24 @@ function App() {
     let fromIndex = diagonal.indexOf(fromCellId);
     let toIndex = diagonal.indexOf(toCellId);
 
+    // TODO: needs to be placed in separate method
+
     // make iteration easier with only positive progression
     if (toIndex < fromIndex) {
       [fromIndex, toIndex] = [toIndex, fromIndex]
     }
 
-    for (let i = fromIndex + 1; i < toIndex; i++) {
-      const cellId = diagonal[i];
-      const cellState = gameState[cellId];
+    const k = toIndex < fromIndex ? -1 : 1;
 
-      if (cellState && cellState.belongsTo !== undefined && cellState.belongsTo !== fromPlayer) {
-        return cellId;
-      }
-    }
+    const sliced = diagonal
+      .slice(fromIndex + k, toIndex)
+      .map(cellId => ({ cellId, cellState: gameState[cellId] }))
+      .filter(({ cellState }) => {
+        return cellState.belongsTo !== undefined && cellState.belongsTo !== fromPlayer
+      });
+
+
+    return sliced[0]?.cellId;
   };
 
   const handleOnDrop = (fromCellId: string, fromPlayer: Player, toCellId: string) => {
