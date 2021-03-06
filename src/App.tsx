@@ -1,240 +1,136 @@
-import React, { useState } from "react";
+import React, { useReducer } from "react";
 
-import { range, reverse, flatten } from "lodash";
+import { DndProvider } from "react-dnd";
+import { HTML5Backend } from "react-dnd-html5-backend";
+import { range, reverse, mapValues, } from "lodash";
 
-import { CellConfig, PlayersState, ActivePromotion, PromotionType, Player } from "./types";
+import { Player } from './types';
 
-import { boardSettings, players } from "./config";
-import {
-  boardConfig,
-  initialPlayersStateConfig,
-  createDiagonals,
-  getPlayersCheckersIds,
-  findElementBetween,
-} from "./utils";
+import stateManager from "./stateManager";
+
+import Checker from 'components/Checker';
+import Cell from 'components/Cell';
+
+import { boardSettings, } from "./config";
+import { createBoardSetup, createInitialGameState, createDiagonals } from "utils/common";
 
 import {
   AppHolder,
   BoardHolder,
-  Cell,
-  Checker,
   YRulerContainer,
   XRulerContainer,
   YRulerCell,
   XRulerCell,
-  ControlsHolder,
-  LastMoveByHolder,
-  MockCell,
+  UndoButtonContainer
 } from "./style";
 
 /* - - - - - - - - - - - - - - - - - - - */
-/* - - - - - - - - - - - - - - - - - - - */
 
-// TODO: --> --> make it work, make it right, make it fast <-- <--
+export const boardSetup = createBoardSetup();
+export const diagonals = createDiagonals();
 
-/* - - - - - - - - - - - - - - - - - - - */
-/* - - - - - - - - - - - - - - - - - - - */
-
-// TODO: implement with reactive actions
-
-// TODO.0: implement util methods without hard coding
-// TODO.1: memoization of components (Cell)
-// TODO.2 (epic): implement sequence of moves between opponents (including capturing chaining)
-// TODO.3: back & forward actions
-
-/* - - - - - - - - - - - - - - - - - - - */
-
-const diagonals = createDiagonals();
+const { stateReducer, initialState } = stateManager(createInitialGameState(boardSetup));
 
 function App() {
-  const [playersState, setPlayersState] = useState<PlayersState>(initialPlayersStateConfig);
-  const [activePromotion, setActivePromotion] = useState<ActivePromotion | undefined>(undefined);
-  const [lastMoveBy, setLastMoveBy] = useState<undefined | Player>(undefined);
+  const [{ gameState, gameHistory, gameStatePointer }, dispatchNewState] = useReducer(
+    stateReducer,
+    initialState
+  );
 
-  /* - - - - - - - - - - - - - - - - - - - */
+  const findCheckerToCapture = (fromCellId: string, toCellId: string, fromPlayer: Player) => {
 
-  const definePromotionType = (initialCell: string, destinationCell: string): PromotionType => {
-    const allowedDiagonals = diagonals.filter((diagonal) => diagonal.includes(initialCell));
-    const allowedCoordinates = flatten(allowedDiagonals);
-    const diagonalPromotionIsCorrect = allowedCoordinates.includes(destinationCell);
+    // we are confident about finding the diagonal -> so make casting
+    const diagonal = diagonals.find(dg => dg.includes(fromCellId) && dg.includes(toCellId)) as string[];
 
-    if (!diagonalPromotionIsCorrect) return { promotionType: "incorrect" };
+    let fromIndex = diagonal.indexOf(fromCellId);
+    let toIndex = diagonal.indexOf(toCellId);
 
-    /* - - - - - - - - - - - - - - - - - - - */
+    // TODO: needs to be placed in separate method
 
-    const chosenPromotionDiagonal = allowedDiagonals.find((diagonal) =>
-      diagonal.includes(destinationCell),
-    );
-
-    const initialPositionIndex = chosenPromotionDiagonal?.indexOf(initialCell) as number;
-    const destinationPositionIndex = chosenPromotionDiagonal?.indexOf(destinationCell) as number;
-
-    const moveRangeAttempt = Math.abs(initialPositionIndex - destinationPositionIndex);
-
-    if (moveRangeAttempt === 1) return { promotionType: "basicMove" };
-
-    /* - - - - - - - - - - - - - - - - - - - */
-
-    const opponent = players.filter((player) => player !== activePromotion?.player)[0];
-    const opponentCheckers = playersState[opponent];
-
-    const opponentCheckersOnPromotionDiagonal = opponentCheckers.filter((checker) => {
-      return chosenPromotionDiagonal?.includes(checker.id);
-    });
-
-    if (moveRangeAttempt === 2) {
-      const capturingChecker = findElementBetween<string>(
-        chosenPromotionDiagonal as string[],
-        initialCell,
-        destinationCell,
-      );
-
-      const isCapturing = opponentCheckersOnPromotionDiagonal
-        .map((checker) => checker.id)
-        .includes(capturingChecker);
-
-      if (isCapturing) return { promotionType: "capturing", capturingChecker, opponent };
+    // make iteration easier with only positive progression
+    if (toIndex < fromIndex) {
+      [fromIndex, toIndex] = [toIndex, fromIndex]
     }
 
-    // in case if moveRangeAttempt is incorrect
-    return { promotionType: "incorrect" };
+    const k = toIndex < fromIndex ? -1 : 1;
+
+    const sliced = diagonal
+      .slice(fromIndex + k, toIndex)
+      .map(cellId => ({ cellId, cellState: gameState[cellId] }))
+      .filter(({ cellState }) => {
+        return cellState.belongsTo !== undefined && cellState.belongsTo !== fromPlayer
+      });
+
+
+    return sliced[0]?.cellId;
   };
 
-  /* - - - - - - - - - - - - - - - - - - - */
+  const handleOnDrop = (fromCellId: string, fromPlayer: Player, toCellId: string) => {
+    const opponentCheckerOnPromotionRange = findCheckerToCapture(fromCellId, toCellId, fromPlayer);
 
-  const makeCapturing = (destinationCell: string, capturingChecker?: string, opponent?: string) => {
-    if (!capturingChecker || !opponent || !activePromotion?.player) return;
-
-    const updatedPlayerState = playersState[activePromotion?.player].map((checker) => {
-      if (checker.id === activePromotion?.cellId) {
-        return {
-          ...checker,
-          id: destinationCell,
-        };
-      }
-
-      return checker;
-    });
-
-    const updatedOpponentState = playersState[opponent].filter((checker) => {
-      return checker.id !== capturingChecker;
-    });
-
-    const updatedPlayersState = {
-      [activePromotion.player]: updatedPlayerState,
-      [opponent]: updatedOpponentState,
+    const kingTransformationCellsMap = {
+      light: ["b8", "d8", "f8", "h8"],
+      dark: ["a1", "c1", "e1", "g1"]
     };
 
-    setPlayersState(updatedPlayersState as PlayersState);
-    setActivePromotion(undefined);
-  };
+    const updatedState = mapValues(gameState, (cellState, cellId) => {
+      const variantsMap = {
+        [fromCellId]: { ...cellState, belongsTo: undefined },
+        [opponentCheckerOnPromotionRange]: { ...cellState, belongsTo: undefined },
+        [toCellId]: {
+          ...cellState,
+          belongsTo: fromPlayer,
+          isKing: gameState[fromCellId].isKing || kingTransformationCellsMap[fromPlayer].includes(toCellId)
+        }
+      };
 
-  const makeBasicMove = (destinationCell: string) => {
-    const activePlayerKey = activePromotion?.player as string;
-    const playerState = playersState[activePlayerKey];
+      const actionIsValid = Object.keys(variantsMap).includes(cellId);
 
-    const updatedPlayerState = playerState.map((checker) => {
-      if (checker.id === activePromotion?.cellId) {
-        return {
-          ...checker,
-          id: destinationCell,
-        };
-      }
-
-      return checker;
+      return actionIsValid ? variantsMap[cellId] : cellState;
     });
 
-    setPlayersState({
-      ...playersState,
-      [activePlayerKey]: updatedPlayerState,
-    });
-    setActivePromotion(undefined);
+    dispatchNewState({ type: "SET_BASIC_MOVE", updatedState })
   };
 
-  /* - - - - - - - - - - - - - - - - - - - */
+  /* - - - - - - - - Renderers - - - - - - - - - - */
 
-  const handleCellClick = ({ id: cellIdFromClick }: CellConfig) => {
-    const { whitePlayerCheckers, blackPlayerCheckers } = getPlayersCheckersIds(playersState);
+  const renderCells = () => {
+    return boardSetup.map((cell) => {
+      const { x, y, id, color } = cell;
 
-    if (cellIdFromClick === activePromotion?.cellId) {
-      setActivePromotion(undefined);
-      return;
-    }
+      const cellUI = {
+        top: (boardSettings.cellsNumber - y) * boardSettings.cellWidth,
+        left: boardSettings.alphabet.indexOf(x) * boardSettings.cellWidth,
+        color: boardSettings.colors[color],
+      };
 
-    const cellIsTaken =
-      whitePlayerCheckers.includes(cellIdFromClick) ||
-      blackPlayerCheckers.includes(cellIdFromClick);
+      const cellState = gameState[id];
 
-    if (activePromotion) {
-      if (cellIsTaken) return;
-
-      const { promotionType, capturingChecker, opponent } = definePromotionType(
-        activePromotion.cellId,
-        cellIdFromClick,
+      return (
+        <Cell
+          cellId={id}
+          key={id}
+          ui={cellUI}
+          onDrop={handleOnDrop}
+          gameState={gameState}
+          cellBelongsTo={cellState.belongsTo}
+        >
+          <Checker cellId={id} cellState={cellState} />
+        </Cell>
       );
-
-      if (promotionType !== "incorrect") {
-        setLastMoveBy(activePromotion.player);
-      }
-
-      switch (promotionType) {
-        case "basicMove":
-          makeBasicMove(cellIdFromClick);
-          return;
-        case "capturing":
-          makeCapturing(cellIdFromClick, capturingChecker, opponent);
-
-          return;
-        case "incorrect":
-          return;
-      }
-    }
-
-    if (cellIsTaken) {
-      const belongsToWhitePlayer = whitePlayerCheckers.includes(cellIdFromClick);
-
-      setActivePromotion({
-        player: belongsToWhitePlayer ? "white" : "black",
-        cellId: cellIdFromClick,
-      });
-      return;
-    }
-  };
-
-  const handleResetAction = () => {
-    setPlayersState(initialPlayersStateConfig);
-    setActivePromotion(undefined);
-  };
-
-  /* - - - - - - - - - Rulers - - - - - - - - - - */
-
-  const renderYRuler = () => {
-    const { cellsNumber, cellWidth } = boardSettings;
-
-    return (
-      <YRulerContainer className="y-ruler-container">
-        {reverse(range(0, cellsNumber)).map((key, i) => {
-          return (
-            <YRulerCell key={key} top={key * cellWidth} className="y-ruler-cell">
-              {i + 1}
-            </YRulerCell>
-          );
-        })}
-      </YRulerContainer>
-    );
+    });
   };
 
   const renderXRuler = () => {
     const { alphabet, cellWidth } = boardSettings;
 
     return (
-      <XRulerContainer className="x-ruler-container">
+      <XRulerContainer>
         {alphabet.map((char) => {
           return (
             <XRulerCell
               key={char}
               left={alphabet.indexOf(char) * cellWidth}
-              className="x-ruler-cell"
             >
               {char}
             </XRulerCell>
@@ -244,65 +140,47 @@ function App() {
     );
   };
 
-  /* - - - - - - - - - - - - - - - - - - - */
+  const renderYRuler = () => {
+    const { cellsNumber, cellWidth } = boardSettings;
 
-  const renderCells = () => {
-    if (!playersState) return null;
-
-    const { whitePlayerCheckers, blackPlayerCheckers } = getPlayersCheckersIds(playersState);
-
-    return boardConfig.map((cell) => {
-      const { id, color, coordinates } = cell;
-
-      const yFactor = (boardSettings.cellsNumber - coordinates.y) * boardSettings.cellWidth;
-      const xFactor = boardSettings.alphabet.indexOf(coordinates.x) * boardSettings.cellWidth;
-
-      const cellUI = {
-        top: yFactor,
-        left: xFactor,
-        color,
-      };
-
-      const cellHasWhiteChecker = whitePlayerCheckers.includes(id);
-      const cellHasBlackChecker = blackPlayerCheckers.includes(id);
-
-      return (
-        <Cell key={id} ui={cellUI} onClick={() => handleCellClick(cell)} className="cell">
-          {(cellHasWhiteChecker || cellHasBlackChecker) && (
-            <Checker
-              isLightColor={cellHasWhiteChecker}
-              isInPromotion={activePromotion && activePromotion.cellId === id}
-            />
-          )}
-        </Cell>
-      );
-    });
+    return (
+      <YRulerContainer>
+        {reverse(range(0, cellsNumber)).map((key: number, i: number) => {
+          return (
+            <YRulerCell key={key} top={key * cellWidth}>
+              {i + 1}
+            </YRulerCell>
+          );
+        })}
+      </YRulerContainer>
+    );
   };
 
   /* - - - - - - - - - - - - - - - - - - - - - - */
-  /* - - - - - - - - - - - - - - - - - - - - - - */
-
   return (
     <AppHolder>
-      <BoardHolder>
-        {renderYRuler()}
-        {renderXRuler()}
+      <DndProvider backend={HTML5Backend}>
+        <BoardHolder>
+          {renderYRuler()}
+          {renderXRuler()}
 
-        {renderCells()}
-      </BoardHolder>
+          {renderCells()}
+        </BoardHolder>
+      </DndProvider>
 
-      <LastMoveByHolder className="last-move-by">
-        <MockCell className="mock-cell">
-          {lastMoveBy && <Checker isLightColor={lastMoveBy === "white"} isInPromotion={false} />}
-        </MockCell>
-        <span>last step from</span>
-      </LastMoveByHolder>
-
-      <ControlsHolder className="controls-holder">
-        <button onClick={handleResetAction}>Reset</button>
-        <button>Back</button>
-        <button>Forward</button>
-      </ControlsHolder>
+      <UndoButtonContainer>
+        <button
+          disabled={gameHistory.length === 1}
+          onClick={() => {
+            dispatchNewState({
+              type: "UNDO",
+              updatedPointer: gameStatePointer - 1
+            });
+          }}
+        >
+          Undo
+        </button>
+      </UndoButtonContainer>
     </AppHolder>
   );
 }

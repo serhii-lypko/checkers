@@ -1,29 +1,12 @@
 import styled from "styled-components";
 
 import { boardSettings } from "./config";
+import { RulerCell } from 'utils/style';
 
-import { CellUIProps } from "./types";
-
-const { cellWidth, cellsNumber, colors } = boardSettings;
-
-/* - - - - - - - - - - Common - - - - - - - - - - - - */
-
-const FlexCenter = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-`;
-
-const RulerCell = styled(FlexCenter)`
-  position: absolute;
-  width: ${cellWidth}px;
-  height: ${cellWidth}px;
-`;
-
-/* - - - - - - - - - - - - - - - - - - - - - - - */
+const { cellWidth, cellsNumber } = boardSettings;
 
 export const AppHolder = styled.div`
-  padding: 100px;
+  padding: 100px 75px;
 `;
 
 export const BoardHolder = styled.div`
@@ -31,32 +14,6 @@ export const BoardHolder = styled.div`
   width: ${cellWidth * cellsNumber}px;
   height: ${cellWidth * cellsNumber}px;
 `;
-
-export const Cell = styled(FlexCenter)<{ ui: CellUIProps }>`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: absolute;
-  top: ${(p) => p.ui.top}px;
-  left: ${(p) => p.ui.left}px;
-  width: ${cellWidth}px;
-  height: ${cellWidth}px;
-  background: ${(p) => p.ui.color};
-  color: ${(p) => (p.ui.color === "white" ? "black" : "white")};
-  outline: none;
-  border: 1px solid black;
-`;
-
-export const Checker = styled.div<{ isLightColor: boolean; isInPromotion: boolean }>`
-  width: ${cellWidth - 20}px;
-  height: ${cellWidth - 20}px;
-  background: ${(p) => (p.isLightColor ? "white" : "#333")};
-  border-radius: 50%;
-  border: 3px solid
-    ${(p) => (p.isInPromotion ? (p.isLightColor ? "black" : "white") : "transparent")};
-`;
-
-/* - - - - - - - - - - - - - - - - - - - */
 
 export const YRulerContainer = styled.div`
   display: flex;
@@ -86,34 +43,7 @@ export const XRulerCell = styled(RulerCell)<{ left: number }>`
   bottom: 0;
 `;
 
-/* - - - - - - - - - - - - - - - - - - - */
-
-export const ControlsHolder = styled.div`
+export const UndoButtonContainer = styled.div`
   display: flex;
-  align-items: center;
-  position: relative;
-  margin-top: 100px;
-
-  button {
-    &:first-child {
-      margin-right: 30px;
-    }
-
-    width: 70px;
-    margin-right: 10px;
-  }
-`;
-
-export const LastMoveByHolder = styled.div`
-  display: flex;
-  align-items: center;
   margin-top: 75px;
-`;
-
-export const MockCell = styled(FlexCenter)`
-  width: ${cellWidth}px;
-  height: ${cellWidth}px;
-  margin-right: 15px;
-  background: ${colors.black};
-  border: 1px solid black;
 `;

@@ -1,39 +1,29 @@
-export type Player = "black" | "white";
+export type Player = "light" | "dark";
 
-export type CellConfig = {
-  coordinates: {
-    x: string;
-    y: number;
-  };
+export type CellParams = {
+  x: string;
+  y: number;
   id: string;
   color: Player;
 };
 
-export type BoardConfig = CellConfig[];
+export type CellState = {
+  isKing: boolean;
+  belongsTo?: Player;
+}
 
-export type PlayerChecker = {
-  id: string;
-  kind: "default" | "king";
-};
+export type GameState = {
+  [key: string]: CellState
+}
 
-export type PlayersState = {
-  white: PlayerChecker[];
-  black: PlayerChecker[];
-};
-
-export type CellUIProps = {
+export type CellUI = {
   top: number;
   left: number;
-  color: Player;
+  color: string;
 };
 
-export type ActivePromotion = {
-  player: Player;
-  cellId: string;
-};
-
-export type PromotionType = {
-  promotionType: "basicMove" | "capturing" | "incorrect";
-  opponent?: string;
-  capturingChecker?: string;
-};
+export type OnDropPayload = {
+  type: string;
+  fromCellId: string;
+  fromPlayer: Player;
+}
