@@ -52,7 +52,7 @@ function App() {
 
     const k = toIndex < fromIndex ? -1 : 1;
 
-    const sliced = diagonal
+    const checkersInRange = diagonal
       .slice(fromIndex + k, toIndex)
       .map(cellId => ({ cellId, cellState: gameState[cellId] }))
       .filter(({ cellState }) => {
@@ -60,7 +60,7 @@ function App() {
       });
 
 
-    return sliced[0]?.cellId;
+    return checkersInRange[0]?.cellId;
   };
 
   const handleOnDrop = (fromCellId: string, fromPlayer: Player, toCellId: string) => {
