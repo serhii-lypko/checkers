@@ -59,7 +59,6 @@ function App() {
         return cellState.belongsTo !== undefined && cellState.belongsTo !== fromPlayer
       });
 
-
     return checkersInRange[0]?.cellId;
   };
 
