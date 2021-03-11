@@ -45,8 +45,6 @@ function App() {
     let fromIndex = diagonal.indexOf(fromCellId);
     let toIndex = diagonal.indexOf(toCellId);
 
-    // TODO: needs to be placed in separate method
-
     // make iteration easier with only positive progression
     if (toIndex < fromIndex) {
       [fromIndex, toIndex] = [toIndex, fromIndex]
